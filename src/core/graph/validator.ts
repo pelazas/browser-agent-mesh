@@ -77,20 +77,30 @@ export class DAGValidator {
   }
 
   private resolveField(field: string, context: ConditionContext): unknown {
-    // Support dot-notation paths like "nodeResults.taskId.output.score"
+    // Support dot-notation paths
+    // - "status" → context.workflowState.status
+    // - "meta.confidence" → context.workflowState.meta.confidence
+    // - "nodeResults.taskId.output.score" → context.nodeResults.get("taskId").output.score
     const parts = field.split('.');
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let current: any = context;
-    for (const part of parts) {
-      if (current === null || current === undefined) return undefined;
-      if (current instanceof Map) {
-        current = current.get(part);
-      } else {
-        current = current[part];
+    if (parts[0] === 'nodeResults') {
+      const taskId = parts[1];
+      const subPath = parts.slice(2);
+      let current = context.nodeResults.get(taskId);
+      for (const part of subPath) {
+        if (current === null || current === undefined) return undefined;
+        current = (current as Record<string, unknown>)[part];
       }
+      return current;
     }
 
+    // Default: resolve from workflowState
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let current: any = context.workflowState;
+    for (const part of parts) {
+      if (current === null || current === undefined) return undefined;
+      current = current[part];
+    }
     return current;
   }
 }
