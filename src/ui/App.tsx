@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { MeshGraph } from '@ui/components/MeshGraph';
 import { PromptInput } from '@ui/components/PromptInput';
-import { AgentCard } from '@ui/components/AgentCard';
 import { TelemetryPanel } from '@ui/components/TelemetryPanel';
 import { WorkflowView } from '@ui/components/WorkflowView';
+import { BlackboardDebugger } from '@ui/components/BlackboardDebugger';
 import { useBlackboard } from '@ui/hooks/useBlackboard';
 import { useNetworkHealth } from '@ui/hooks/useMesh';
 import '@ui/styles/main.css';
@@ -132,6 +132,7 @@ export const App: React.FC = () => {
         <div className="app__sidebar">
           <MeshGraph nodes={meshNodes} />
           <TelemetryPanel metrics={telemetryMetrics} />
+          <BlackboardDebugger />
         </div>
       </div>
     </div>

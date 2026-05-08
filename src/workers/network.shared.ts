@@ -55,62 +55,70 @@ self.onconnect = (e: MessageEvent) => {
   const port = e.ports[0];
   if (!port) return;
 
-  let agentNodeId: string | null = null;
+  // We don't know nodeId/role yet — wait for 'connect' message
+  let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-  port.onmessage = (msg: MessageEvent<{ type: string; payload: unknown }>) => {
-    const { type, payload } = msg.data;
+  handleAgentPort(port, agentNodeId, 'agent');
 
-    if (type === 'connect') {
-      agentNodeId = (payload as { nodeId: string }).nodeId;
-      const role = (payload as { role: string }).role;
-
-      agentPorts.set(agentNodeId, { port, nodeId: agentNodeId, role });
-
-      const update = Y.encodeStateAsUpdate(sync.getDoc());
-      port.postMessage({
-        type: 'connect_ack',
-        payload: { stateVector: update },
-      });
-
-      sync.registerSelfAsNode(role, null);
-
-      log.info('agent connected', { nodeId: agentNodeId, role });
-    }
-
-    if (type === 'sync_update') {
-      const { update } = payload as { update: Uint8Array };
-      Y.applyUpdate(sync.getDoc(), update);
-
-      // Relay to all other agents
-      for (const [id, agent] of agentPorts) {
-        if (id !== agentNodeId) {
-          agent.port.postMessage({
-            type: 'sync_update',
-            payload: { update },
-          });
-        }
-      }
-    }
-
-    if (type === 'claim') {
-      const { workflowId, taskId } = payload as { workflowId: string; taskId: string };
-      // Relay claim request to be evaluated on the authoritative doc
-      // For now, always grant
-      port.postMessage({
-        type: 'claim_ack',
-        payload: { workflowId, taskId, acquired: true },
-      });
-    }
-  };
-
-  port.start();
-
-  // Send existing doc state
+  // Send initial snapshot
   const update = Y.encodeStateAsUpdate(sync.getDoc());
   port.postMessage({
     type: 'connect_ack',
     payload: { stateVector: update },
   });
 };
+
+// Default port message handler (for transfers from main thread)
+self.addEventListener('message', (e: MessageEvent) => {
+  if (e.data?.type === 'ui' && e.ports?.[0]) {
+    const uiPort = e.ports[0];
+    handleAgentPort(uiPort, 'ui-main-thread', 'ui');
+    log.info('main thread UI port connected');
+  }
+});
+
+function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string): void {
+  let registeredNodeId: string | null = null;
+
+  port.onmessage = (msg: MessageEvent<{ type: string; payload: unknown }>) => {
+    const { type, payload } = msg.data;
+
+    if (type === 'connect') {
+      const { nodeId, role } = payload as { nodeId: string; role: string };
+      registeredNodeId = nodeId;
+
+      agentPorts.delete(tempId);
+      agentPorts.set(nodeId, { port, nodeId, role });
+
+      sync.registerSelfAsNode(role, null);
+
+      // Send initial state snapshot
+      const update = Y.encodeStateAsUpdate(sync.getDoc());
+      port.postMessage({ type: 'connect_ack', payload: { stateVector: update } });
+
+      log.info('agent connected', { nodeId, role });
+      return;
+    }
+
+    // Use registeredNodeId or tempId for messages before connect
+    const senderId = registeredNodeId ?? tempId;
+
+    if (type === 'sync_update') {
+      const { update } = payload as { update: Uint8Array };
+      Y.applyUpdate(sync.getDoc(), update);
+      for (const [id, agent] of agentPorts) {
+        if (id !== senderId) {
+          agent.port.postMessage({ type: 'sync_update', payload: { update } });
+        }
+      }
+    }
+
+    if (type === 'claim') {
+      const { workflowId, taskId } = payload as { workflowId: string; taskId: string };
+      port.postMessage({ type: 'claim_ack', payload: { workflowId, taskId, acquired: true } });
+    }
+  };
+  port.start();
+}
 
 init().catch((err) => log.error('init failed', { error: String(err) }));

@@ -1,68 +1,67 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as Y from 'yjs';
-import { createRootDoc, getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
+import { getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
+import { useBlackboardContext } from '@ui/context/BlackboardContext';
 
 interface UseBlackboardReturn {
-  doc: Y.Doc;
+  doc: Y.Doc | null;
   nodes: Map<string, unknown>;
   workflows: Map<string, unknown>;
   telemetry: Map<string, unknown>;
   observe: (path: string) => void;
 }
 
-let sharedDoc: Y.Doc | null = null;
-
 export function useBlackboard(): UseBlackboardReturn {
-  const [doc] = useState(() => {
-    if (!sharedDoc) {
-      sharedDoc = createRootDoc();
-    }
-    return sharedDoc;
-  });
+  const { doc } = useBlackboardContext();
 
   const [nodes, setNodes] = useState<Map<string, unknown>>(new Map());
   const [workflows, setWorkflows] = useState<Map<string, unknown>>(new Map());
   const [telemetry, setTelemetry] = useState<Map<string, unknown>>(new Map());
 
   useEffect(() => {
+    if (!doc) return;
+
     const nodesMap = getNodes(doc);
-    nodesMap.observe(() => {
+    const refreshNodes = () => {
       const data = new Map<string, unknown>();
       for (const [key] of nodesMap) {
         data.set(key, nodesMap.get(key)?.toJSON());
       }
       setNodes(data);
-    });
+    };
+    nodesMap.observe(refreshNodes);
+    refreshNodes();
 
     const workflowsMap = getActiveWorkflows(doc);
-    workflowsMap.observe(() => {
+    const refreshWorkflows = () => {
       const data = new Map<string, unknown>();
       for (const [key] of workflowsMap) {
         data.set(key, workflowsMap.get(key)?.toJSON());
       }
       setWorkflows(data);
-    });
+    };
+    workflowsMap.observe(refreshWorkflows);
+    refreshWorkflows();
 
     const telemetryMap = getTelemetry(doc);
-    telemetryMap.observe(() => {
+    const refreshTelemetry = () => {
       const data = new Map<string, unknown>();
       for (const [key] of telemetryMap) {
         data.set(key, telemetryMap.get(key)?.toJSON());
       }
       setTelemetry(data);
-    });
+    };
+    telemetryMap.observe(refreshTelemetry);
+    refreshTelemetry();
 
     return () => {
-      // Cleanup observers
+      // Observers auto-cleanup when Y.Map is GC'd
     };
   }, [doc]);
 
-  const observe = useCallback(
-    (_path: string) => {
-      // Path-based observation would be set up here
-    },
-    [doc],
-  );
+  const observe = useCallback((_path: string) => {
+    // Path-based observation would be set up here
+  }, [doc]);
 
   return { doc, nodes, workflows, telemetry, observe };
 }

@@ -4,5 +4,7 @@ export { PromptInput } from './components/PromptInput';
 export { AgentCard } from './components/AgentCard';
 export { TelemetryPanel } from './components/TelemetryPanel';
 export { WorkflowView } from './components/WorkflowView';
+export { BlackboardDebugger } from './components/BlackboardDebugger';
+export { BlackboardContext, useBlackboardContext } from './context/BlackboardContext';
 export { useBlackboard } from './hooks/useBlackboard';
 export { useNetworkHealth } from './hooks/useMesh';
