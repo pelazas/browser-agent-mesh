@@ -1,0 +1,1 @@
+export { SentinelAgent } from './sentinel';
