@@ -1,8 +1,8 @@
-# Agent Architecture: The Legion Mesh
+# Agent Architecture: Browser Agent Mesh
 
 This document outlines the design, lifecycles, and roles of the autonomous agents operating within the decentralized browser mesh. 
 
-Unlike traditional centralized agent frameworks where a single Python process manages state, the Legion mesh uses a **Decentralized State Graph**. Agent workflows (sequential, parallel, conditional, and iterative) are managed implicitly via a shared CRDT (Conflict-free Replicated Data Type) Blackboard synced across WebRTC.
+Unlike traditional centralized agent frameworks where a single Python process manages state, the application mesh uses a **Decentralized State Graph**. Agent workflows (sequential, parallel, conditional, and iterative) are managed implicitly via a shared CRDT (Conflict-free Replicated Data Type) Blackboard synced across WebRTC.
 
 ---
 
