@@ -48,6 +48,14 @@ async function init(): Promise<void> {
   });
 
   gossiper.start();
+
+  sync.onPeersChanged((count) => {
+    const msg = { type: 'peers_update', payload: { count } };
+    for (const [, agent] of agentPorts) {
+      agent.port.postMessage(msg);
+    }
+  });
+
   log.info('network shared worker initialized');
 }
 

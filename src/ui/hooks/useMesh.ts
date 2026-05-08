@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 
 interface NetworkHealth {
   connected: boolean;
@@ -6,26 +6,23 @@ interface NetworkHealth {
   latency: number | null;
 }
 
-export function useNetworkHealth(): NetworkHealth {
-  const [health, setHealth] = useState<NetworkHealth>({
-    connected: false,
-    peerCount: 0,
-    latency: null,
-  });
+interface NetworkState {
+  peerCount: number;
+}
 
-  const checkHealth = useCallback(async () => {
-    // In production: check actual WebRTC connection state
-    // For now, report based on document state
-    setHealth((prev) => ({
-      ...prev,
-      connected: true,
-    }));
-  }, []);
+export function useNetworkHealth(): NetworkHealth {
+  const [peerCount, setPeerCount] = useState(0);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(checkHealth, 5000);
+    const interval = setInterval(() => {
+      const net = (window as unknown as Record<string, NetworkState | undefined>).__MESH_NETWORK__;
+      const count = net?.peerCount ?? 0;
+      setPeerCount(count);
+      setConnected(count > 0);
+    }, 1000);
     return () => clearInterval(interval);
-  }, [checkHealth]);
+  }, []);
 
-  return health;
+  return { connected, peerCount, latency: null };
 }

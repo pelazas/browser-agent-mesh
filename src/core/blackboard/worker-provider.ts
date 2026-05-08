@@ -11,7 +11,8 @@ export type WorkerMessageType =
   | 'claim_ack'
   | 'publish_tool'
   | 'call_tool'
-  | 'tool_result';
+  | 'tool_result'
+  | 'peers_update';
 
 export interface WorkerMessage {
   type: WorkerMessageType;
@@ -58,6 +59,7 @@ export class WorkerSyncProvider {
   private doc: Y.Doc;
   private port: MessagePort;
   private pendingObserves: Map<string, (value: unknown) => void> = new Map();
+  onPeersUpdate?: (count: number) => void;
 
   constructor(doc: Y.Doc, port: MessagePort) {
     this.doc = doc;
@@ -67,7 +69,6 @@ export class WorkerSyncProvider {
       this.handleMessage(e.data);
     };
 
-    // Send local updates to the network worker
     this.doc.on('update', (update: Uint8Array) => {
       this.port.postMessage({
         type: 'sync_update',
@@ -132,7 +133,11 @@ export class WorkerSyncProvider {
       }
       case 'claim_ack': {
         const ack = msg as ClaimAckMessage;
-        // The agent worker retains the callback via the lock module
+        break;
+      }
+      case 'peers_update': {
+        const p = msg as { type: 'peers_update'; payload: { count: number } };
+        this.onPeersUpdate?.(p.payload.count);
         break;
       }
     }

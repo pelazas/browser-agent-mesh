@@ -105,14 +105,18 @@ const meshState: MeshRoot = {
     const port = channel.port1;
     networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
 
+    const networkState = { peerCount: 0 };
+    (window as unknown as Record<string, unknown>).__MESH_NETWORK__ = networkState;
+
     const doc = createLocalDoc();
     const provider = new WorkerSyncProvider(doc, port);
-    // WorkerSyncProvider.connect() sends { type: 'connect', payload: { nodeId, role } }
-    // which the SharedWorker handles as a regular agent connection
+    provider.onPeersUpdate = (count) => {
+      networkState.peerCount = count;
+      this.connected = count > 0;
+    };
     provider.connect('ui-main-thread', 'ui');
 
     this.blackboardDoc = doc;
-    this.connected = true;
 
     // Expose for console inspection
     (window as unknown as Record<string, unknown>).__MESH_DOC__ = doc;
