@@ -51,7 +51,7 @@ services:
       - --max-port=65535
       - --use-auth-secret
       - --static-auth-secret=${TURN_SECRET:-change-me-in-production}
-      - --realm=legion-mesh
+      - --realm=browser-agent-mesh
     networks:
       - mesh-net
     profiles:

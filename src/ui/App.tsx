@@ -100,7 +100,7 @@ export const App: React.FC = () => {
   return (
     <div className="app">
       <header className="app__header">
-        <h1 className="app__title">Legion Browser Agent Mesh</h1>
+        <h1 className="app__title">Browser Agent Mesh</h1>
         <div className="app__status">
           <span
             className={`app__status-dot${networkHealth.connected ? ' app__status-dot--connected' : ''}`}

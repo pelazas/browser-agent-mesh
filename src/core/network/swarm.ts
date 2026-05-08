@@ -99,7 +99,7 @@ export class SwarmNode {
 
   handleMCPStream(handler: (data: Uint8Array, peerId: string) => Promise<Uint8Array>): void {
     if (!this.node) return;
-    this.node.handle('/legion-mcp/1.0.0', async ({ stream }) => {
+    this.node.handle('/bam-mcp/1.0.0', async ({ stream }) => {
       const reader = stream.source.getReader();
       while (true) {
         const { done, value } = await reader.read();

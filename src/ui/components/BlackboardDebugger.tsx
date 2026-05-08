@@ -107,7 +107,7 @@ export const BlackboardDebugger: React.FC = () => {
   useEffect(() => {
     if (!doc || !visible) return;
 
-    const rootMap = doc.getMap('legion-mesh-root');
+    const rootMap = doc.getMap('bam-blackboard');
 
     const refresh = () => {
       const raw = rootMap.toJSON() as Record<string, unknown>;

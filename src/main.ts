@@ -27,7 +27,7 @@ function bootstrapWorkers(): void {
     try {
       networkWorker = new SharedWorker(
         new URL('@workers/network.shared.ts', import.meta.url),
-        { type: 'module', name: 'legion-network' },
+        { type: 'module', name: 'bam-network' },
       );
       log.info('network shared worker started');
     } catch (err) {
@@ -39,7 +39,7 @@ function bootstrapWorkers(): void {
     try {
       const sentinelWorker = new Worker(
         new URL('@workers/sentinel.worker.ts', import.meta.url),
-        { type: 'module', name: 'legion-sentinel' },
+        { type: 'module', name: 'bam-sentinel' },
       );
       sentinelWorker.onmessage = (e) => log.debug('sentinel message', { data: e.data });
       log.info('sentinel worker started');
@@ -52,7 +52,7 @@ function bootstrapWorkers(): void {
     try {
       const nodeWorker = new Worker(
         new URL('@workers/node.worker.ts', import.meta.url),
-        { type: 'module', name: 'legion-node' },
+        { type: 'module', name: 'bam-node' },
       );
       nodeWorker.onmessage = (e) => {
         const data = e.data as { type: string; gpu?: unknown };
@@ -68,7 +68,7 @@ function bootstrapWorkers(): void {
     try {
       const bridgeWorker = new Worker(
         new URL('@workers/bridge.worker.ts', import.meta.url),
-        { type: 'module', name: 'legion-bridge' },
+        { type: 'module', name: 'bam-bridge' },
       );
       log.info('bridge worker started');
     } catch (err) {
@@ -80,7 +80,7 @@ function bootstrapWorkers(): void {
     try {
       const synthWorker = new Worker(
         new URL('@workers/synthesizer.worker.ts', import.meta.url),
-        { type: 'module', name: 'legion-synthesizer' },
+        { type: 'module', name: 'bam-synthesizer' },
       );
       log.info('synthesizer worker started');
     } catch (err) {
@@ -147,7 +147,7 @@ function mountUI(): void {
 }
 
 async function init(): Promise<void> {
-  log.info('legion browser agent mesh initializing');
+  log.info('browser agent mesh initializing');
 
   bootstrapWorkers();
   mountUI();

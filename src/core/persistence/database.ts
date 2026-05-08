@@ -20,12 +20,12 @@ export async function initDatabase(): Promise<Database> {
   const opfs = await sqlite.installOpfsSAHPool();
   log.info('opfs pool installed', { metrics: opfs.metrics });
 
-  db = new sqlite.oo1.OpfsDb('/legion-mesh.db', 'c');
+  db = new sqlite.oo1.OpfsDb('/bam-mesh.db', 'c');
   db.exec('PRAGMA journal_mode=WAL;');
   db.exec('PRAGMA synchronous=NORMAL;');
   db.exec('PRAGMA cache_size=-16384;');
 
-  log.info('database opened', { path: '/legion-mesh.db' });
+  log.info('database opened', { path: '/bam-mesh.db' });
   return db;
 }
 

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('app loads and renders the UI', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.app__title')).toHaveText('Legion Browser Agent Mesh');
+  await expect(page.locator('.app__title')).toHaveText('Browser Agent Mesh');
 });
 
 test('prompt input is visible and functional', async ({ page }) => {

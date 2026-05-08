@@ -43,5 +43,5 @@ export type MCPMessage =
   | MCPCallToolRequest
   | MCPCallToolResponse;
 
-export const MCP_PROTOCOL = '/legion-mcp/1.0.0';
-export const GOSSIP_TOPIC = '/legion-telemetry/1.0.0';
+export const MCP_PROTOCOL = '/bam-mcp/1.0.0';
+export const GOSSIP_TOPIC = '/bam-telemetry/1.0.0';

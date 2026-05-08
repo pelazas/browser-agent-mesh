@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 
-export const ROOT_DOC_KEY = 'legion-mesh-root';
+export const ROOT_DOC_KEY = 'bam-blackboard';
 
 export function createRootDoc(): Y.Doc {
   const doc = new Y.Doc();

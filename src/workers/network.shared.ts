@@ -18,7 +18,7 @@ const agentPorts: Map<string, AgentPort> = new Map();
 
 const nodeId = generateId();
 const signalingUrl = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:4444';
-const roomName = 'legion-mesh';
+const roomName = 'browser-agent-mesh';
 
 const sync = new YjsSyncProvider({
   signalingUrl,
