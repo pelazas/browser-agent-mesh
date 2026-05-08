@@ -34,6 +34,13 @@ const mcpServer = new MCPServer();
 
 let swarm: SwarmNode | null = null;
 
+function broadcastPeerCount(count: number): void {
+  const msg = { type: 'peers_update', payload: { count } };
+  for (const [, agent] of agentPorts) {
+    agent.port.postMessage(msg);
+  }
+}
+
 async function init(): Promise<void> {
   log.info('network shared worker starting', { nodeId });
 
@@ -50,11 +57,14 @@ async function init(): Promise<void> {
   gossiper.start();
 
   sync.onPeersChanged((count) => {
-    const msg = { type: 'peers_update', payload: { count } };
-    for (const [, agent] of agentPorts) {
-      agent.port.postMessage(msg);
-    }
+    broadcastPeerCount(count);
   });
+
+  // Periodic fallback: broadcast peer count every 2 seconds
+  // in case the y-webrtc event fires before agent ports are connected
+  setInterval(() => {
+    broadcastPeerCount(sync.getPeerCount());
+  }, 2000);
 
   log.info('network shared worker initialized');
 }
