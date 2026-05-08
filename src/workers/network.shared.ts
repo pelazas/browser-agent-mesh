@@ -86,20 +86,17 @@ self.onconnect = (e: MessageEvent) => {
   });
 };
 
-// Default port message handler (for transfers from main thread)
-self.addEventListener('message', (e: MessageEvent) => {
-  if (e.data?.type === 'ui' && e.ports?.[0]) {
-    const uiPort = e.ports[0];
-    handleAgentPort(uiPort, 'ui-main-thread', 'ui');
-    log.info('main thread UI port connected');
-  }
-});
-
 function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string): void {
   let registeredNodeId: string | null = null;
 
   port.onmessage = (msg: MessageEvent<{ type: string; payload: unknown }>) => {
     const { type, payload } = msg.data;
+
+    if (type === 'ui' && msg.ports?.[0]) {
+      handleAgentPort(msg.ports[0], 'ui-main-thread', 'ui');
+      log.info('main thread UI port connected');
+      return;
+    }
 
     if (type === 'connect') {
       const { nodeId, role } = payload as { nodeId: string; role: string };

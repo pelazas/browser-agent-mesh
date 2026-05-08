@@ -64,6 +64,7 @@ export class WorkerSyncProvider {
   constructor(doc: Y.Doc, port: MessagePort) {
     this.doc = doc;
     this.port = port;
+    this.port.start();
 
     this.port.onmessage = (e: MessageEvent<WorkerMessage>) => {
       this.handleMessage(e.data);
