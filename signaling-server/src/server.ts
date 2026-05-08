@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import type { IncomingMessage } from 'http';
 
 const PORT = parseInt(process.env.PORT || '4444', 10);
 
@@ -28,46 +29,26 @@ wss.on('listening', () => {
   console.log(`[signaling] listening on ws://0.0.0.0:${PORT}`);
 });
 
-wss.on('connection', (ws: WebSocket & { alive?: boolean; roomName?: string }) => {
+wss.on('connection', (ws: WebSocket & { alive?: boolean; roomName?: string }, req: IncomingMessage) => {
   ws.alive = true;
   ws.on('pong', () => heartbeat.call(ws));
 
-  ws.on('message', (raw: Buffer) => {
-    let msg: { type: string; room?: string; [key: string]: unknown };
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      return;
-    }
+  // y-webrtc uses the URL path as the room name, e.g. /browser-agent-mesh
+  const rawRoom = (req.url ?? '/default').split('?')[0].replace(/^\//, '');
+  const roomName = rawRoom || 'default';
+  const room = getRoom(roomName);
 
-    if (msg.type === 'join' && msg.room) {
-      const room = getRoom(msg.room);
-      room.clients.add(ws);
-      ws.roomName = msg.room;
-      console.log(`[signaling] peer joined room: ${msg.room} (${room.clients.size} peers)`);
-      return;
-    }
+  room.clients.add(ws);
+  ws.roomName = roomName;
+  console.log(`[signaling] peer connected to ${roomName} (${room.clients.size} peers)`);
 
-    if (msg.type === 'leave' && msg.room) {
-      const room = rooms.get(msg.room);
-      if (room) {
-        room.clients.delete(ws);
-        if (room.clients.size === 0) rooms.delete(msg.room);
-      }
-      return;
-    }
+  ws.on('message', (data: Buffer, isBinary: boolean) => {
+    const room = ws.roomName ? rooms.get(ws.roomName) : null;
+    if (!room) return;
 
-    // Relay message to all other peers in the same room
-    if (ws.roomName) {
-      const room = rooms.get(ws.roomName);
-      if (room) {
-        const payload = JSON.stringify(msg);
-        for (const client of room.clients) {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(payload);
-          }
-        }
-      }
+    for (const client of room.clients) {
+      if (client === ws || client.readyState !== WebSocket.OPEN) continue;
+      client.send(data, { binary: isBinary });
     }
   });
 
@@ -76,8 +57,8 @@ wss.on('connection', (ws: WebSocket & { alive?: boolean; roomName?: string }) =>
       const room = rooms.get(ws.roomName);
       if (room) {
         room.clients.delete(ws);
-        console.log(`[signaling] peer left room: ${ws.roomName} (${room.clients.size} peers)`);
-        if (room.clients.size === 0) rooms.delete(ws.roomName);
+        console.log(`[signaling] peer left ${room.name} (${room.clients.size} peers)`);
+        if (room.clients.size === 0) rooms.delete(room.name);
       }
     }
   });
