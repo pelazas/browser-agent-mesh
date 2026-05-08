@@ -1,0 +1,358 @@
+:root {
+  --bg-primary: #0f0f13;
+  --bg-secondary: #1a1a24;
+  --bg-card: #22222e;
+  --text-primary: #e4e4ec;
+  --text-secondary: #8888a0;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --border: #333348;
+  --radius: 8px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.app__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.app__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+.app__status-dot--connected {
+  background: var(--success);
+}
+
+.app__grid {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  grid-template-rows: auto 1fr;
+  gap: 24px;
+}
+
+.app__main {
+  grid-row: 1 / 3;
+}
+
+.app__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* MeshGraph */
+.mesh-graph h3 {
+  font-size: 1rem;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+.mesh-graph__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.mesh-graph__empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 32px;
+  font-size: 0.875rem;
+}
+
+.mesh-node {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 0.8125rem;
+}
+
+.mesh-node--idle { border-left: 3px solid var(--text-secondary); }
+.mesh-node--busy { border-left: 3px solid var(--warning); }
+.mesh-node--offline { border-left: 3px solid var(--error); opacity: 0.5; }
+
+.mesh-node__role {
+  font-weight: 600;
+  text-transform: capitalize;
+  margin-bottom: 4px;
+}
+
+.mesh-node__id {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.mesh-node__status {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mesh-node__gpu,
+.mesh-node__tasks {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+/* PromptInput */
+.prompt-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prompt-input__textarea {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.prompt-input__textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.prompt-input__submit {
+  align-self: flex-end;
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 8px 24px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.prompt-input__submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.prompt-input__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* AgentCard */
+.agent-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 0.8125rem;
+}
+
+.agent-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.agent-card__role {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.agent-card__status {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.agent-card--idle .agent-card__status { color: var(--text-secondary); }
+.agent-card--busy .agent-card__status { color: var(--warning); }
+.agent-card--offline .agent-card__status { color: var(--error); }
+
+.agent-card__id {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 0.75rem;
+  margin-bottom: 8px;
+}
+
+.agent-card__gpu {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.agent-card__tasks {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+/* TelemetryPanel */
+.telemetry-panel h3 {
+  font-size: 1rem;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+.telemetry-panel__empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 24px;
+  font-size: 0.875rem;
+}
+
+.telemetry-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.telemetry-entry {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 0.75rem;
+}
+
+.telemetry-entry__id {
+  font-weight: 600;
+  font-family: monospace;
+  margin-bottom: 4px;
+}
+
+.telemetry-entry__stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+}
+
+.telemetry-entry__time {
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  margin-top: 4px;
+}
+
+/* WorkflowView */
+.workflow-view {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.workflow-view__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.workflow-view__id {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.workflow-view__state {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.workflow-view--active .workflow-view__state { color: var(--accent); }
+.workflow-view--completed .workflow-view__state { color: var(--success); }
+.workflow-view--failed .workflow-view__state { color: var(--error); }
+
+.workflow-view__prompt {
+  font-size: 0.8125rem;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.workflow-view__progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workflow-view__bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.workflow-view__fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+.workflow-view__stats {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
