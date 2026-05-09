@@ -7,6 +7,7 @@ import { generateId } from '@utils/id';
 import { createLogger } from '@utils/logging';
 
 const log = createLogger('network-shared-worker');
+const sharedSelf = self as unknown as SharedWorkerGlobalScope;
 
 interface AgentPort {
   port: MessagePort;
@@ -17,8 +18,6 @@ interface AgentPort {
 const agentPorts: Map<string, AgentPort> = new Map();
 
 const nodeId = generateId();
-const startTime = Date.now();
-
 const doc: Y.Doc = createRootDoc();
 
 const gossiper = new GossipTelemetry({
@@ -26,7 +25,7 @@ const gossiper = new GossipTelemetry({
   nodeId,
 });
 
-const mcpServer = new MCPServer();
+void new MCPServer();
 
 let swarm: SwarmNode | null = null;
 
@@ -50,7 +49,7 @@ async function init(): Promise<void> {
   log.info('network shared worker initialized');
 }
 
-self.onconnect = (e: MessageEvent) => {
+sharedSelf.onconnect = (e: MessageEvent) => {
   const port = e.ports[0];
   if (!port) return;
 
@@ -74,9 +73,13 @@ function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string)
     const { type, payload } = msg.data;
     msgCount.received++;
 
-    if (type === 'ui' && msg.ports?.[0]) {
-      handleAgentPort(msg.ports[0], 'ui-main-thread', 'ui');
-      log.info('main thread UI port connected', { agentPorts: agentPorts.size + 1 });
+    if ((type === 'ui' || type === 'agent') && msg.ports?.[0]) {
+      const role = ((payload as { role?: string } | undefined)?.role) ?? defaultRole;
+      const routedId = type === 'ui'
+        ? 'ui-main-thread'
+        : `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      handleAgentPort(msg.ports[0], routedId, role);
+      log.info('agent port routed through shared worker', { type, role, agentPorts: agentPorts.size + 1 });
       return;
     }
 

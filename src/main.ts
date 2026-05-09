@@ -14,6 +14,10 @@ let networkWorker: SharedWorker | null = null;
 let syncProvider: YjsSyncProvider | null = null;
 let sharedDoc: Y.Doc | null = null;
 let connected = false;
+let sentinelWorkerRef: Worker | null = null;
+let nodeWorkerRef: Worker | null = null;
+let bridgeWorkerRef: Worker | null = null;
+let synthWorkerRef: Worker | null = null;
 
 function detectCapabilities() {
   const hasWebGPU = 'gpu' in navigator;
@@ -41,11 +45,11 @@ function bootstrapWorkers(): void {
 
   if (caps.hasWorker) {
     try {
-      const sentinelWorker = new Worker(
+      sentinelWorkerRef = new Worker(
         new URL('@workers/sentinel.worker.ts', import.meta.url),
         { type: 'module', name: 'bam-sentinel' },
       );
-      sentinelWorker.onmessage = (e) => log.debug('sentinel message', { data: e.data });
+      sentinelWorkerRef.onmessage = (e) => log.debug('sentinel message', { data: e.data });
       log.info('sentinel worker started');
     } catch (err) {
       log.error('failed to start sentinel', { error: String(err) });
@@ -54,11 +58,11 @@ function bootstrapWorkers(): void {
 
   if (caps.hasWebGPU && caps.hasWorker) {
     try {
-      const nodeWorker = new Worker(
+      nodeWorkerRef = new Worker(
         new URL('@workers/node.worker.ts', import.meta.url),
         { type: 'module', name: 'bam-node' },
       );
-      nodeWorker.onmessage = (e) => {
+      nodeWorkerRef.onmessage = (e) => {
         const data = e.data as { type: string; gpu?: unknown };
         if (data.type === 'ready' && data.gpu) log.info('node worker ready with GPU', { gpu: data.gpu });
       };
@@ -70,10 +74,11 @@ function bootstrapWorkers(): void {
 
   if (caps.hasWorker) {
     try {
-      const bridgeWorker = new Worker(
+      bridgeWorkerRef = new Worker(
         new URL('@workers/bridge.worker.ts', import.meta.url),
         { type: 'module', name: 'bam-bridge' },
       );
+      bridgeWorkerRef.onmessage = (e) => log.debug('bridge message', { data: e.data });
       log.info('bridge worker started');
     } catch (err) {
       log.error('failed to start bridge worker', { error: String(err) });
@@ -82,10 +87,11 @@ function bootstrapWorkers(): void {
 
   if (caps.hasWorker) {
     try {
-      const synthWorker = new Worker(
+      synthWorkerRef = new Worker(
         new URL('@workers/synthesizer.worker.ts', import.meta.url),
         { type: 'module', name: 'bam-synthesizer' },
       );
+      synthWorkerRef.onmessage = (e) => log.debug('synthesizer message', { data: e.data });
       log.info('synthesizer worker started');
     } catch (err) {
       log.error('failed to start synthesizer', { error: String(err) });
@@ -187,6 +193,20 @@ function connectToSharedWorker(): void {
   workerProv.connect('ui-main-thread', 'ui');
 
   log.info('main thread connected to shared worker');
+
+  connectAgentWorker(sentinelWorkerRef, 'sentinel');
+  connectAgentWorker(nodeWorkerRef, 'worker');
+  connectAgentWorker(bridgeWorkerRef, 'bridge');
+  connectAgentWorker(synthWorkerRef, 'synthesizer');
+}
+
+function connectAgentWorker(worker: Worker | null, role: string): void {
+  if (!worker || !networkWorker) return;
+
+  const channel = new MessageChannel();
+  networkWorker.port.postMessage({ type: 'agent', payload: { role } }, [channel.port2]);
+  worker.postMessage({ type: 'init', port: channel.port1 }, [channel.port1]);
+  log.info('dedicated worker connected to shared worker', { role });
 }
 
 function mountUI(): void {
