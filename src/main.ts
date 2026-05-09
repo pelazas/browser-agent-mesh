@@ -6,6 +6,7 @@ import { BlackboardContext } from '@ui/context/BlackboardContext';
 import { createLocalDoc, WorkerSyncProvider } from '@core/blackboard/worker-provider';
 import { getRootMap, getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
 import { createLogger } from '@utils/logging';
+import type { SyncDebugState } from '@core/network/sync';
 
 const log = createLogger('main');
 
@@ -105,14 +106,64 @@ const meshState: MeshRoot = {
     const port = channel.port1;
     networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
 
-    const networkState = { peerCount: 0 };
+    const networkState = {
+      peerCount: 0,
+      signalingConnected: false,
+      synced: false,
+      webrtcPeers: [] as string[],
+      awarenessStates: 0,
+      rtcPeerConnectionAvailable: typeof RTCPeerConnection !== 'undefined',
+      lastUpdate: 0,
+      eventTimeline: [] as Array<{ time: number; event: string; detail: unknown }>,
+      dump() {
+        return structuredClone({
+          peerCount: this.peerCount,
+          signalingConnected: this.signalingConnected,
+          synced: this.synced,
+          webrtcPeers: this.webrtcPeers,
+          awarenessStates: this.awarenessStates,
+          rtcAvailable: this.rtcPeerConnectionAvailable,
+          lastUpdate: this.lastUpdate,
+          eventTimeline: this.eventTimeline,
+        });
+      },
+      checkConnection(): string {
+        if (!this.rtcPeerConnectionAvailable) {
+          return 'RTCPeerConnection NOT available in this context. WebRTC cannot work. This is a browser limitation — try running the app in a regular tab (Window context) or check SharedWorker support for RTCPeerConnection.';
+        }
+        if (!this.signalingConnected) {
+          return 'Signaling NOT connected. Check that the signaling server is running and reachable at the configured URL.';
+        }
+        if (this.webrtcPeers.length === 0 && this.awarenessStates === 0) {
+          return `Signaling connected, but no WebRTC peers discovered. Possible causes:
+- NAT/firewall blocking WebRTC (STUN failed)
+- Browser privacy settings blocking WebRTC
+- y-webrtc room collision
+Check SharedWorker console at chrome://inspect/#workers → bam-network for detailed logs.`;
+        }
+        if (this.webrtcPeers.length > 0 && this.peerCount === 0) {
+          return 'WebRTC peers connected but awareness not synced yet. This should resolve within a few seconds.';
+        }
+        return `Connected: ${this.peerCount} peer(s), ${this.webrtcPeers.length} WebRTC connection(s), ${this.awarenessStates} awareness states.`;
+      },
+    };
     (window as unknown as Record<string, unknown>).__MESH_NETWORK__ = networkState;
 
     const doc = createLocalDoc();
     const provider = new WorkerSyncProvider(doc, port);
     provider.onPeersUpdate = (count) => {
       networkState.peerCount = count;
+      networkState.lastUpdate = Date.now();
       this.connected = count > 0;
+    };
+    provider.onDebugState = (state: SyncDebugState) => {
+      networkState.signalingConnected = state.signalingConnected;
+      networkState.synced = state.synced;
+      networkState.webrtcPeers = state.webrtcPeers;
+      networkState.awarenessStates = state.awarenessStates;
+      networkState.rtcPeerConnectionAvailable = state.rtcPeerConnectionAvailable;
+      networkState.eventTimeline = state.eventTimeline;
+      networkState.lastUpdate = Date.now();
     };
     provider.connect('ui-main-thread', 'ui');
 
@@ -129,6 +180,27 @@ const meshState: MeshRoot = {
     };
 
     log.info('main thread connected to shared worker, doc is live');
+
+    // Diagnostic help
+    const diagState = networkState;
+    setTimeout(() => {
+      const now = Date.now();
+      const elapsed = ((now - diagState.lastUpdate) / 1000).toFixed(1);
+      console.log(
+`%c[Browser Agent Mesh] Diagnostics after 2s wait:
+  signalingConnected: ${diagState.signalingConnected}
+  synced: ${diagState.synced}
+  webrtcPeers: ${JSON.stringify(diagState.webrtcPeers)}
+  awarenessStates: ${diagState.awarenessStates}
+  peerCount: ${diagState.peerCount}
+  rtcAvailable: ${diagState.rtcPeerConnectionAvailable}
+  lastUpdate: ${elapsed}s ago
+  ---
+  Inspect live: window.__MESH_NETWORK__
+  SharedWorker console: chrome://inspect/#workers → bam-network`,
+        'font-family: monospace;',
+      );
+    }, 2500);
   },
 };
 
