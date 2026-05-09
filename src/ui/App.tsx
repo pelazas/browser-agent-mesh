@@ -103,12 +103,21 @@ export const App: React.FC = () => {
         <h1 className="app__title">Browser Agent Mesh</h1>
         <div className="app__status">
           <span
-            className={`app__status-dot${networkHealth.connected ? ' app__status-dot--connected' : ''}`}
+            className={`app__status-dot${networkHealth.connected ? ' app__status-dot--connected' : networkHealth.signalingConnected ? ' app__status-dot--signaling' : ''}`}
+            title={
+              networkHealth.rtcAvailable
+                ? `RTCPeerConnection: available | Signaling: ${networkHealth.signalingConnected ? 'connected' : 'disconnected'} | WebRTC: ${networkHealth.connected ? 'connected' : 'waiting'} | Awareness: ${networkHealth.awarenessStates} states`
+                : 'RTCPeerConnection NOT available in this context — WebRTC will not work'
+            }
           />
           <span>
             {networkHealth.connected
-              ? `${networkHealth.peerCount} peers`
-              : 'disconnected'}
+              ? `${networkHealth.peerCount} peer${networkHealth.peerCount !== 1 ? 's' : ''}`
+              : networkHealth.signalingConnected
+                ? 'signaling OK, waiting for peers...'
+                : !networkHealth.rtcAvailable
+                  ? 'WebRTC unavailable'
+                  : 'disconnected (no signaling)'}
           </span>
         </div>
       </header>

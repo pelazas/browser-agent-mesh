@@ -70,6 +70,10 @@ body {
   background: var(--success);
 }
 
+.app__status-dot--signaling {
+  background: var(--warning);
+}
+
 .app__grid {
   display: grid;
   grid-template-columns: 1fr 350px;
