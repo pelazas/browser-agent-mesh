@@ -62,8 +62,18 @@ export function useBlackboard(): UseBlackboardReturn {
     telemetryMap.observe(refreshTelemetry);
     refreshTelemetry();
 
+    // Polling fallback: Y.applyUpdate (remote sync) may not fire
+    // Y.Map observers reliably on deeply nested maps.
+    // The BlackboardDebugger reads directly from the doc;
+    // this keeps the UI reactive state in sync with the same data.
+    const interval = setInterval(() => {
+      refreshNodes();
+      refreshWorkflows();
+      refreshTelemetry();
+    }, 2000);
+
     return () => {
-      // Observers auto-cleanup when Y.Map is GC'd
+      clearInterval(interval);
     };
   }, [doc]);
 

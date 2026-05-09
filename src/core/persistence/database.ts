@@ -17,7 +17,7 @@ export async function initDatabase(): Promise<Database> {
     },
   });
 
-  const opfs = await sqlite.installOpfsSAHPool();
+  const opfs = await sqlite.installOpfsSAHPoolVfs();
   log.info('opfs pool installed', { metrics: opfs.metrics });
 
   db = new sqlite.oo1.OpfsDb('/bam-mesh.db', 'c');
