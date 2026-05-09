@@ -157,6 +157,8 @@ Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
 
     setInterval(() => {
       const state = sync.getDebugState();
+      const count = sync.getPeerCount();
+      networkState.peerCount = count;
       networkState.signalingConnected = state.signalingConnected;
       networkState.synced = state.synced;
       networkState.webrtcPeers = state.webrtcPeers;
@@ -166,6 +168,7 @@ Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
       if (state.signalingConnected || state.webrtcPeers.length > 0) {
         networkState.lastUpdate = Date.now();
       }
+      this.connected = count > 0;
     }, 1000);
 
     // Expose for console inspection
