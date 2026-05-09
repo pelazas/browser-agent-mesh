@@ -67,11 +67,14 @@ export class WorkerSyncProvider {
   constructor(doc: Y.Doc, port: MessagePort) {
     this.doc = doc;
     this.port = port;
-    this.port.start();
 
+    // Set handler BEFORE start() so queued messages (e.g. connect_ack)
+    // are not lost if the browser delivers them synchronously on start().
     this.port.onmessage = (e: MessageEvent<WorkerMessage>) => {
       this.handleMessage(e.data);
     };
+
+    this.port.start();
 
     this.doc.on('update', (update: Uint8Array) => {
       this.port.postMessage({
