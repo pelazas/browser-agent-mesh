@@ -18,7 +18,10 @@ export class SentinelAgent extends BaseAgent {
   }
 
   protected async run(): Promise<void> {
-    this.log.info('sentinel running');
+    this.log.info('sentinel running, entering poll loop');
+
+    // Initial delay to allow doc sync before first poll
+    await this.sleep(2000);
 
     while (this.running) {
       await this.processPendingPromptRequests();
