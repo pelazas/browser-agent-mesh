@@ -3,6 +3,7 @@ import { DAG } from '@core/graph/dag';
 import { createWorkflow, getActiveWorkflows } from '@core/blackboard/root-doc';
 import { generateId } from '@utils/id';
 import type { TaskNode } from '@core/blackboard/schema';
+import type * as Y from 'yjs';
 
 interface ParsedTask {
   description: string;
@@ -11,8 +12,8 @@ interface ParsedTask {
 }
 
 export class SentinelAgent extends BaseAgent {
-  constructor() {
-    super({ role: 'sentinel' });
+  constructor(doc?: Y.Doc) {
+    super({ role: 'sentinel', doc });
   }
 
   protected async run(): Promise<void> {
