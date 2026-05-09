@@ -23,47 +23,51 @@ export function acquireLock(
 
   const locks = workflow.get('locks') as Y.Map<Y.Map<unknown>>;
 
-  // Check if task already locked
-  const existingRaw = locks.get(taskId);
-  if (existingRaw) {
-    const existing = existingRaw.toJSON() as unknown as LockEntry;
-    if (Date.now() - existing.acquiredAt < existing.ttlMs) {
-      return {
-        acquired: false,
-        lockId: existing.lockId,
-        conflictOwner: existing.ownerNodeId,
-      };
+  return doc.transact(() => {
+    // Check if task already locked
+    const existingRaw = locks.get(taskId);
+    if (existingRaw) {
+      const existing = existingRaw.toJSON() as unknown as LockEntry;
+      if (Date.now() - existing.acquiredAt < existing.ttlMs) {
+        return {
+          acquired: false,
+          lockId: existing.lockId,
+          conflictOwner: existing.ownerNodeId,
+        };
+      }
+      // Lock expired — steal it
+      locks.delete(taskId);
     }
-    // Lock expired — steal it
-    locks.delete(taskId);
-  }
 
-  const lockId = generateId();
-  const entry = new Y.Map<unknown>();
-  entry.set('lockId', lockId);
-  entry.set('ownerNodeId', nodeId);
-  entry.set('taskId', taskId);
-  entry.set('acquiredAt', Date.now());
-  entry.set('ttlMs', ttlMs);
+    const lockId = generateId();
+    const entry = new Y.Map<unknown>();
+    entry.set('lockId', lockId);
+    entry.set('ownerNodeId', nodeId);
+    entry.set('taskId', taskId);
+    entry.set('acquiredAt', Date.now());
+    entry.set('ttlMs', ttlMs);
 
-  locks.set(taskId, entry);
+    locks.set(taskId, entry);
 
-  return { acquired: true, lockId };
+    return { acquired: true, lockId };
+  });
 }
 
 export function releaseLock(doc: Y.Doc, workflowId: string, taskId: string, nodeId: string): boolean {
   const workflow = getWorkflowDoc(doc, workflowId);
   if (!workflow) return false;
 
-  const locks = workflow.get('locks') as Y.Map<Y.Map<unknown>>;
-  const entry = locks.get(taskId);
-  if (!entry) return false;
+  return doc.transact(() => {
+    const locks = workflow.get('locks') as Y.Map<Y.Map<unknown>>;
+    const entry = locks.get(taskId);
+    if (!entry) return false;
 
-  const owner = entry.get('ownerNodeId');
-  if (owner !== nodeId) return false;
+    const owner = entry.get('ownerNodeId');
+    if (owner !== nodeId) return false;
 
-  locks.delete(taskId);
-  return true;
+    locks.delete(taskId);
+    return true;
+  });
 }
 
 export function extendLock(
@@ -76,16 +80,18 @@ export function extendLock(
   const workflow = getWorkflowDoc(doc, workflowId);
   if (!workflow) return false;
 
-  const locks = workflow.get('locks') as Y.Map<Y.Map<unknown>>;
-  const entry = locks.get(taskId);
-  if (!entry) return false;
+  return doc.transact(() => {
+    const locks = workflow.get('locks') as Y.Map<Y.Map<unknown>>;
+    const entry = locks.get(taskId);
+    if (!entry) return false;
 
-  const owner = entry.get('ownerNodeId');
-  if (owner !== nodeId) return false;
+    const owner = entry.get('ownerNodeId');
+    if (owner !== nodeId) return false;
 
-  const currentTtl = (entry.get('ttlMs') as number) ?? DEFAULT_TTL_MS;
-  entry.set('ttlMs', currentTtl + additionalMs);
-  entry.set('acquiredAt', Date.now());
+    const currentTtl = (entry.get('ttlMs') as number) ?? DEFAULT_TTL_MS;
+    entry.set('ttlMs', currentTtl + additionalMs);
+    entry.set('acquiredAt', Date.now());
 
-  return true;
+    return true;
+  });
 }
