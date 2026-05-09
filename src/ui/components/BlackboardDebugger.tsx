@@ -99,7 +99,7 @@ function TreeNodeRow({ node, depth }: { node: TreeNode; depth: number }) {
 }
 
 export const BlackboardDebugger: React.FC = () => {
-  const { doc, connected } = useBlackboardContext();
+  const { doc } = useBlackboardContext();
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [visible, setVisible] = useState(false);
   const prevJson = useRef('');
@@ -132,14 +132,13 @@ export const BlackboardDebugger: React.FC = () => {
         onClick={() => setVisible(!visible)}
       >
         {visible ? '▾' : '▸'} Blackboard
-        <span className={`debugger-dot ${connected ? 'debugger-dot--on' : ''}`} />
       </button>
 
       {visible && (
         <div className="debugger-tree">
           {tree.length === 0 && (
             <div className="debugger-empty">
-              Blackboard empty{!connected ? ' (not connected)' : ''}
+              Blackboard empty
             </div>
           )}
           {tree.map((node) => (
