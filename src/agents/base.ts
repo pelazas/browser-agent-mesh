@@ -6,11 +6,12 @@ import { generateId } from '@utils/id';
 export interface AgentConfig {
   role: string;
   nodeId?: string;
+  doc?: Y.Doc;
 }
 
 export abstract class BaseAgent {
   protected doc: Y.Doc;
-  protected provider: WorkerSyncProvider;
+  protected provider: WorkerSyncProvider | null = null;
   protected nodeId: string;
   protected role: string;
   protected log: ReturnType<typeof createLogger>;
@@ -19,13 +20,15 @@ export abstract class BaseAgent {
   constructor(config: AgentConfig) {
     this.nodeId = config.nodeId ?? generateId();
     this.role = config.role;
-    this.doc = new Y.Doc();
-    this.provider = new WorkerSyncProvider(this.doc, null as unknown as MessagePort);
+    this.doc = config.doc ?? new Y.Doc();
+    if (!config.doc) {
+      this.provider = new WorkerSyncProvider(this.doc, null as unknown as MessagePort);
+    }
     this.log = createLogger(`${config.role}-agent:${this.nodeId.slice(0, 8)}`);
   }
 
   connect(port: MessagePort): void {
-    (this.provider as unknown as { port: MessagePort }).port = port;
+    this.provider = new WorkerSyncProvider(this.doc, port);
     this.provider.connect(this.nodeId, this.role);
     this.log.info('connected to mesh');
   }
@@ -39,7 +42,7 @@ export abstract class BaseAgent {
   stop(): void {
     this.running = false;
     this.log.info('agent stopped');
-    this.provider.destroy();
+    this.provider?.destroy();
   }
 
   protected abstract run(): Promise<void>;
