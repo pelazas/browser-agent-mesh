@@ -3,7 +3,7 @@ import { BaseAgent } from '../base';
 import { getActiveWorkflows } from '@core/blackboard/root-doc';
 import { acquireLock, releaseLock } from '@core/blackboard/lock';
 import type { Edge, GPUProfile, TaskNode } from '@core/blackboard/schema';
-import { getEngineStatus, selectBestModel } from '@webllm/index';
+import { chat, getCurrentModel, getEngineStatus, loadModel, selectBestModel } from '@webllm/index';
 import { DAG } from '@core/graph/dag';
 
 interface NodeConfig {
@@ -12,6 +12,7 @@ interface NodeConfig {
 
 export class NodeWorkerAgent extends BaseAgent {
   private gpuProfile: GPUProfile | null;
+  private modelId: string | null = null;
 
   constructor(config: NodeConfig) {
     super({ role: 'worker' });
@@ -20,14 +21,7 @@ export class NodeWorkerAgent extends BaseAgent {
 
   protected async run(): Promise<void> {
     this.log.info('node worker running');
-
-    // Select and load appropriate model
-    if (this.gpuProfile) {
-      const model = selectBestModel(this.gpuProfile.vramEstimateMB, 'medium');
-      if (model) {
-        this.log.info('selected model', { model: model.id });
-      }
-    }
+    await this.ensureModelReady();
 
     const pollInterval = 1500;
 
@@ -79,6 +73,7 @@ export class NodeWorkerAgent extends BaseAgent {
         this.log.info('task claimed', { taskId: task.id, workflowId });
 
         try {
+          this.markTaskRunning(workflowId, task.id);
           const result = await this.executeTask(task);
           this.completeTask(workflowId, task.id, result);
         } catch (err) {
@@ -94,13 +89,23 @@ export class NodeWorkerAgent extends BaseAgent {
     this.log.info('executing task', { taskId: task.id, type: task.type });
 
     if (task.type === 'llm_inference') {
+      await this.ensureModelReady();
       const status = getEngineStatus();
       if (status !== 'ready') {
         throw new Error(`Engine not ready: ${status}`);
       }
 
-      // In production: load engine, run inference
-      return { type: 'llm_result', output: `Processed: ${task.description}` };
+      const prompt = typeof task.args.prompt === 'string' ? task.args.prompt : task.description;
+      const response = await chat([{ role: 'user', content: prompt }]);
+
+      return {
+        type: 'llm_result',
+        prompt,
+        output: response.message.content,
+        modelId: getCurrentModel() ?? this.modelId,
+        tokensGenerated: response.tokensGenerated,
+        tokensPerSec: response.tokensPerSec,
+      };
     }
 
     if (task.type === 'reduce') {
@@ -111,21 +116,63 @@ export class NodeWorkerAgent extends BaseAgent {
     throw new Error(`Unsupported task type for worker: ${task.type}`);
   }
 
-  private completeTask(workflowId: string, taskId: string, _result: unknown): void {
+  private async ensureModelReady(): Promise<void> {
+    if (!this.gpuProfile) {
+      throw new Error('No GPU profile available for Node Worker');
+    }
+
+    const model = selectBestModel(this.gpuProfile.vramEstimateMB, 'medium');
+    if (!model) {
+      throw new Error('No compatible WebLLM model found for this worker');
+    }
+
+    this.modelId = model.id;
+
+    if (getEngineStatus() === 'ready' && getCurrentModel() === model.id) {
+      return;
+    }
+
+    this.log.info('loading selected model', { model: model.id });
+    await loadModel(model.id);
+    this.log.info('model ready', { model: model.id });
+  }
+
+  private markTaskRunning(workflowId: string, taskId: string): void {
     const workflows = getActiveWorkflows(this.doc);
     const workflow = workflows.get(workflowId);
     if (!workflow) return;
 
-    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-    const node = dagMap.get(taskId);
-    if (node) {
-      node.set('status', 'completed');
-      node.set('completedAt', Date.now());
-    }
+    this.doc.transact(() => {
+      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+      const node = dagMap.get(taskId);
+      if (!node) return;
 
-    const completedCount = (workflow.get('completedCount') as number) + 1;
-    workflow.set('completedCount', completedCount);
-    workflow.set('updatedAt', Date.now());
+      node.set('status', 'running');
+      node.set('claimedBy', this.nodeId);
+      node.set('startedAt', Date.now());
+      workflow.set('updatedAt', Date.now());
+    });
+  }
+
+  private completeTask(workflowId: string, taskId: string, result: unknown): void {
+    const workflows = getActiveWorkflows(this.doc);
+    const workflow = workflows.get(workflowId);
+    if (!workflow) return;
+
+    this.doc.transact(() => {
+      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+      const node = dagMap.get(taskId);
+      if (node) {
+        node.set('status', 'completed');
+        node.set('result', result);
+        node.set('error', null);
+        node.set('completedAt', Date.now());
+      }
+
+      const completedCount = (workflow.get('completedCount') as number) + 1;
+      workflow.set('completedCount', completedCount);
+      workflow.set('updatedAt', Date.now());
+    });
 
     this.log.info('task completed', { taskId, workflowId });
   }
@@ -135,16 +182,20 @@ export class NodeWorkerAgent extends BaseAgent {
     const workflow = workflows.get(workflowId);
     if (!workflow) return;
 
-    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-    const node = dagMap.get(taskId);
-    if (node) {
-      node.set('status', 'failed');
-      node.set('error', error);
-    }
+    this.doc.transact(() => {
+      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+      const node = dagMap.get(taskId);
+      if (node) {
+        node.set('status', 'failed');
+        node.set('error', error);
+        node.set('completedAt', Date.now());
+      }
 
-    const failedCount = (workflow.get('failedCount') as number) + 1;
-    workflow.set('failedCount', failedCount);
-    workflow.set('updatedAt', Date.now());
+      const failedCount = (workflow.get('failedCount') as number) + 1;
+      workflow.set('failedCount', failedCount);
+      workflow.set('state', 'failed');
+      workflow.set('updatedAt', Date.now());
+    });
 
     this.log.warn('task failed', { taskId, workflowId, error });
   }

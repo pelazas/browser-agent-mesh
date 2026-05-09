@@ -21,9 +21,6 @@ export abstract class BaseAgent {
     this.nodeId = config.nodeId ?? generateId();
     this.role = config.role;
     this.doc = config.doc ?? new Y.Doc();
-    if (!config.doc) {
-      this.provider = new WorkerSyncProvider(this.doc, null as unknown as MessagePort);
-    }
     this.log = createLogger(`${config.role}-agent:${this.nodeId.slice(0, 8)}`);
   }
 
