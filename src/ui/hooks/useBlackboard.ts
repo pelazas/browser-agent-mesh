@@ -6,6 +6,28 @@ import { createLogger } from '@utils/logging';
 
 const log = createLogger('use-blackboard');
 
+function shallowEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+    if ((a as Record<string, unknown>)[key] !== (b as Record<string, unknown>)[key]) return false;
+  }
+  return true;
+}
+
+function shallowEqualMaps(a: Map<string, unknown>, b: Map<string, unknown>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, valueA] of a) {
+    if (!b.has(key)) return false;
+    if (!shallowEqual(valueA, b.get(key))) return false;
+  }
+  return true;
+}
+
 interface UseBlackboardReturn {
   doc: Y.Doc | null;
   nodes: Map<string, unknown>;
@@ -32,7 +54,7 @@ export function useBlackboard(): UseBlackboardReturn {
       for (const [key] of nMap) {
         data.set(key, nMap.get(key)?.toJSON());
       }
-      setNodes(data);
+      setNodes((prev) => (shallowEqualMaps(prev, data) ? prev : data));
     };
     if (nodesMap) {
       nodesMap.observe(refreshNodes);
@@ -49,10 +71,13 @@ export function useBlackboard(): UseBlackboardReturn {
         data.set(key, wfMap.get(key)?.toJSON());
         count++;
       }
-      if (count > 0) {
-        log.info('workflows refresh', { count, viaClosure: !!workflowsMap });
-      }
-      setWorkflows(data);
+      setWorkflows((prev) => {
+        if (shallowEqualMaps(prev, data)) return prev;
+        if (count > 0) {
+          log.info('workflows refresh', { count, viaClosure: !!workflowsMap });
+        }
+        return data;
+      });
     };
     if (workflowsMap) {
       workflowsMap.observe(refreshWorkflows);
@@ -67,7 +92,7 @@ export function useBlackboard(): UseBlackboardReturn {
       for (const [key] of tMap) {
         data.set(key, tMap.get(key)?.toJSON());
       }
-      setTelemetry(data);
+      setTelemetry((prev) => (shallowEqualMaps(prev, data) ? prev : data));
     };
     if (telemetryMap) {
       telemetryMap.observe(refreshTelemetry);
