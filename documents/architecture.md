@@ -31,14 +31,15 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 - **File:** `src/agents/worker/worker.ts`
 
 ### Bridge (MCP Tool Agent)
-- **Trigger:** Tool call requests (`scrape` tasks) on the Blackboard
-- **Does:** Web scraping (no CORS in browser context), OPFS read/write, format+stream data
+- **Trigger:** DAG-ready `scrape` tasks on the Blackboard
+- **Claims** tasks via CRDT lock to prevent duplicate execution
+- **Does:** Web scraping (no CORS in browser context), writes structured scrape results back to the DAG task node, OPFS read/write, format+stream data
 - **Does not:** run LLMs
 - **File:** `src/agents/bridge/bridge.ts`
 
 ### Synthesizer (Reduce Agent)
 - **Trigger:** All tasks in a workflow marked `completed`
-- **Does:** Consolidates parallel outputs into a cohesive final payload
+- **Does:** Consolidates completed task outputs into a final structured workflow result on the Blackboard
 - **Triggers:** HITL prompts if confidence scores are low
 - **File:** `src/agents/synthesizer/synthesizer.ts`
 
@@ -52,9 +53,9 @@ User prompt → UI → Blackboard.promptRequests[requestId]
           ┌──────────────┼──────────────┐
           ▼              ▼              ▼
       Sentinel      Node Workers    Bridge Agents
-      (claims       (claim +        (claim scrape
-       prompt,       execute LLM)    tasks)
-       builds DAG)
+      (claims       (claim +        (claim +
+       prompt,       execute LLM)    execute scrape)
+        builds DAG)
           │              │              │
           └──────────────┼──────────────┘
                         ▼

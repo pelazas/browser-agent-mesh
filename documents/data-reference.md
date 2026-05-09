@@ -13,10 +13,13 @@ bam-blackboard: Y.Map
   │           ├── state: "active" | "paused" | "completed" | "failed"
   │           ├── createdAt: number (ms)
   │           ├── updatedAt: number (ms)
+  │           ├── completedAt: number | null (ms)
   │           ├── ownerNodeId: string
   │           ├── taskCount: number
   │           ├── completedCount: number
   │           ├── failedCount: number
+  │           ├── result: WorkflowResult | null
+  │           ├── error: string | null
   │           ├── dag: Y.Map<string, TaskNodeEntry>
   │           │     └── {taskId}: Y.Map — see TaskNode schema below
   │           ├── edges: Y.Array<Edge>
@@ -91,6 +94,8 @@ interface TaskNode {
 }
 ```
 
+Workflow task execution is coordinated by per-workflow CRDT locks. Executors poll for DAG-ready `pending` tasks, acquire `activeWorkflows[workflowId].locks[taskId]`, then transition the task to `running`. On completion they write `result` and mark the task `completed`; malformed or execution errors mark it `failed`.
+
 ### Edge
 ```ts
 interface Edge {
@@ -141,12 +146,36 @@ interface WorkflowEntry {
   state: 'active' | 'paused' | 'completed' | 'failed';
   createdAt: number;
   updatedAt: number;
+  completedAt: number | null;
   ownerNodeId: string;
   taskCount: number;
   completedCount: number;
   failedCount: number;
+  result: WorkflowResult | null;
+  error: string | null;
 }
 ```
+
+### WorkflowResult
+```ts
+interface WorkflowResult {
+  type: 'synthesis_result';
+  content: string;
+  fragments: Array<{
+    taskId: string;
+    content: unknown;
+    confidence: number;
+  }>;
+  metadata: {
+    totalCompletedTasks: number;
+    deduplicatedCount: number;
+    fragmentCount: number;
+    confidenceThreshold: number;
+  };
+}
+```
+
+Synthesizer workers reduce all completed task results in deterministic DAG order, persist the final `WorkflowResult` onto the workflow, and then mark the workflow `completed`. If a workflow is otherwise ready but has no usable completed task results, the synthesizer marks the workflow `failed` with an error.
 
 ### PromptRequestEntry
 ```ts
