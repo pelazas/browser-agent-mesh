@@ -26,40 +26,52 @@ export function useBlackboard(): UseBlackboardReturn {
 
     const nodesMap = getNodes(doc);
     const refreshNodes = () => {
+      const nMap = getNodes(doc);
+      if (!nMap) return;
       const data = new Map<string, unknown>();
-      for (const [key] of nodesMap) {
-        data.set(key, nodesMap.get(key)?.toJSON());
+      for (const [key] of nMap) {
+        data.set(key, nMap.get(key)?.toJSON());
       }
       setNodes(data);
     };
-    nodesMap.observe(refreshNodes);
+    if (nodesMap) {
+      nodesMap.observe(refreshNodes);
+    }
     refreshNodes();
 
     const workflowsMap = getActiveWorkflows(doc);
     const refreshWorkflows = () => {
+      const wfMap = getActiveWorkflows(doc);
+      if (!wfMap) return;
       const data = new Map<string, unknown>();
       let count = 0;
-      for (const [key] of workflowsMap) {
-        data.set(key, workflowsMap.get(key)?.toJSON());
+      for (const [key] of wfMap) {
+        data.set(key, wfMap.get(key)?.toJSON());
         count++;
       }
       if (count > 0) {
-        log.info('workflows observer fired', { count });
+        log.info('workflows refresh', { count, viaClosure: !!workflowsMap });
       }
       setWorkflows(data);
     };
-    workflowsMap.observe(refreshWorkflows);
+    if (workflowsMap) {
+      workflowsMap.observe(refreshWorkflows);
+    }
     refreshWorkflows();
 
     const telemetryMap = getTelemetry(doc);
     const refreshTelemetry = () => {
+      const tMap = getTelemetry(doc);
+      if (!tMap) return;
       const data = new Map<string, unknown>();
-      for (const [key] of telemetryMap) {
-        data.set(key, telemetryMap.get(key)?.toJSON());
+      for (const [key] of tMap) {
+        data.set(key, tMap.get(key)?.toJSON());
       }
       setTelemetry(data);
     };
-    telemetryMap.observe(refreshTelemetry);
+    if (telemetryMap) {
+      telemetryMap.observe(refreshTelemetry);
+    }
     refreshTelemetry();
 
     // Polling fallback: Y.applyUpdate (remote sync) may not fire
