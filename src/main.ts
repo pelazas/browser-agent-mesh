@@ -6,6 +6,9 @@ import { BlackboardContext } from '@ui/context/BlackboardContext';
 import { WorkerSyncProvider } from '@core/blackboard/worker-provider';
 import { getRootMap, getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
 import { YjsSyncProvider } from '@core/network/sync';
+import { initDatabase } from '@core/persistence/database';
+import { initEventLog, captureYDocUpdate } from '@core/persistence/event-log';
+import { initCheckpoints, loadLatestCheckpoint, startPeriodicCheckpoint } from '@core/persistence/checkpoint';
 import { createLogger } from '@utils/logging';
 
 const log = createLogger('main');
@@ -99,13 +102,18 @@ function bootstrapWorkers(): void {
   }
 }
 
-function initSyncProvider(): void {
+function initSyncProvider(existingState?: Uint8Array): void {
   const signalingUrl = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:4444';
   const roomName = 'browser-agent-mesh';
 
   syncProvider = new YjsSyncProvider({ signalingUrl, roomName });
   syncProvider.registerSelfAsNode('ui', null);
   sharedDoc = syncProvider.getDoc();
+
+  if (existingState && existingState.length > 0) {
+    Y.applyUpdate(sharedDoc, existingState);
+    log.info('applied existing session state', { bytes: existingState.length });
+  }
 
   const networkState = {
     peerCount: 0,
@@ -227,12 +235,46 @@ function mountUI(): void {
   log.info('UI mounted', { hasDoc: !!sharedDoc });
 }
 
+async function initPersistence(): Promise<void> {
+  try {
+    await initDatabase();
+    await initEventLog();
+    await initCheckpoints();
+    log.info('persistence layer initialized');
+  } catch (err) {
+    log.warn('persistence init failed (non-blocking)', { error: String(err) });
+  }
+}
+
+function startSessionCheckpoints(doc: Y.Doc): () => void {
+  return startPeriodicCheckpoint(doc, '__session__', 30_000);
+}
+
+async function loadSessionState(): Promise<Uint8Array | null> {
+  try {
+    await initDatabase();
+    await initCheckpoints();
+    return await loadLatestCheckpoint('__session__');
+  } catch (err) {
+    log.warn('session state load failed (non-blocking)', { error: String(err) });
+    return null;
+  }
+}
+
 async function init(): Promise<void> {
   log.info('browser agent mesh initializing');
 
   bootstrapWorkers();
-  initSyncProvider();
+
+  const existingState = await loadSessionState();
+  initSyncProvider(existingState ?? undefined);
   mountUI();
+
+  await initPersistence();
+  if (sharedDoc) {
+    startSessionCheckpoints(sharedDoc);
+    captureYDocUpdate(sharedDoc, 'ui-main-thread', null);
+  }
 
   setTimeout(() => {
     connectToSharedWorker();
