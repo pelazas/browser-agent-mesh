@@ -1,9 +1,9 @@
 import { BaseAgent } from '../base';
 import { DAG } from '@core/graph/dag';
-import { createWorkflow, getActiveWorkflows } from '@core/blackboard/root-doc';
+import { createWorkflow } from '@core/blackboard/root-doc';
 import { generateId } from '@utils/id';
 import type { TaskNode } from '@core/blackboard/schema';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 
 interface ParsedTask {
   description: string;
