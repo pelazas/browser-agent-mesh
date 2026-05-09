@@ -28,9 +28,22 @@ export class SentinelAgent extends BaseAgent {
 
   async processPendingPromptRequests(): Promise<number> {
     const requests = getPromptRequests(this.doc);
+    if (!requests) return 0;
+
+    let total = 0;
+    let pending = 0;
+    for (const [, r] of requests) {
+      total++;
+      if (r.get('status') === 'pending') pending++;
+    }
+    if (total > 0) {
+      this.log.info('prompt request scan', { total, pending });
+    }
+
     let processedCount = 0;
 
     for (const [, request] of requests) {
+      if (request.get('status') !== 'pending') continue;
       if (!this.claimPromptRequest(request)) continue;
 
       const prompt = request.get('prompt');
@@ -48,6 +61,10 @@ export class SentinelAgent extends BaseAgent {
       }
 
       processedCount++;
+    }
+
+    if (processedCount > 0) {
+      this.log.info('prompt requests processed', { processedCount });
     }
 
     return processedCount;

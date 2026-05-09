@@ -6,6 +6,7 @@ const log = createLogger('sentinel-worker');
 let agent: SentinelAgent | null = null;
 
 self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort; config?: unknown }>) => {
+  log.info('received message', { type: e.data.type, hasPort: !!e.data.port });
   if (e.data.type === 'init') {
     agent = new SentinelAgent();
     agent.connect(e.data.port);
