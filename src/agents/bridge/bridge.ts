@@ -36,6 +36,7 @@ export class BridgeAgent extends BaseAgent {
 
   private async pollForToolCalls(): Promise<void> {
     const workflows = getActiveWorkflows(this.doc);
+    if (!workflows) return;
 
     for (const [workflowId] of workflows) {
       const workflow = workflows.get(workflowId);

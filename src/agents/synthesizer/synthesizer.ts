@@ -22,6 +22,7 @@ export class SynthesizerAgent extends BaseAgent {
 
   private async checkForReadyWorkflows(): Promise<void> {
     const workflows = getActiveWorkflows(this.doc);
+    if (!workflows) return;
 
     for (const [workflowId, workflow] of workflows) {
       if (!workflow) continue;
