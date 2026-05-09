@@ -1,5 +1,6 @@
 import * as Y from 'yjs';
 import { createRootDoc, getRootMap } from './root-doc';
+import type { SyncDebugState } from '@core/network/sync';
 
 export type WorkerMessageType =
   | 'connect'
@@ -12,7 +13,8 @@ export type WorkerMessageType =
   | 'publish_tool'
   | 'call_tool'
   | 'tool_result'
-  | 'peers_update';
+  | 'peers_update'
+  | 'debug_state';
 
 export interface WorkerMessage {
   type: WorkerMessageType;
@@ -60,6 +62,7 @@ export class WorkerSyncProvider {
   private port: MessagePort;
   private pendingObserves: Map<string, (value: unknown) => void> = new Map();
   onPeersUpdate?: (count: number) => void;
+  onDebugState?: (state: SyncDebugState) => void;
 
   constructor(doc: Y.Doc, port: MessagePort) {
     this.doc = doc;
@@ -139,6 +142,11 @@ export class WorkerSyncProvider {
       case 'peers_update': {
         const p = msg as { type: 'peers_update'; payload: { count: number } };
         this.onPeersUpdate?.(p.payload.count);
+        break;
+      }
+      case 'debug_state': {
+        const d = msg as { type: 'debug_state'; payload: { state: SyncDebugState; workerNodeId: string; startTime: number; msgCount: unknown } };
+        this.onDebugState?.(d.payload.state);
         break;
       }
     }
