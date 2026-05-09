@@ -1,5 +1,6 @@
 import type { GPUProfile } from '@core/blackboard/schema';
 import { createLogger } from '@utils/logging';
+import { getAvailableModels } from './model-loader';
 
 const log = createLogger('gpu-profiler');
 
@@ -146,10 +147,9 @@ async function runMicroBenchmark(device: GPUDevice): Promise<number> {
   }
 }
 
-function getCompatibleModels(_vramMB: number): string[] {
-  // Simple tiered compatibility based on VRAM budget
-  // Actual model selection happens in model-loader.ts
-  return [];
+function getCompatibleModels(vramMB: number): string[] {
+  const models = getAvailableModels(vramMB);
+  return models.map((m) => m.id);
 }
 
 async function tryGetAdapterInfo(adapter: GPUAdapter): Promise<GPUAdapterInfo | null> {
