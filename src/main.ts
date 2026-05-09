@@ -21,6 +21,8 @@ let sentinelWorkerRef: Worker | null = null;
 let nodeWorkerRef: Worker | null = null;
 let bridgeWorkerRef: Worker | null = null;
 let synthWorkerRef: Worker | null = null;
+// Stashed MessagePort for deferred transfer to SharedWorker
+let uiSyncPort2: MessagePort | null = null;
 
 function detectCapabilities() {
   const hasWebGPU = 'gpu' in navigator;
@@ -190,17 +192,28 @@ Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
   log.info('sync provider created in main thread', { room: roomName });
 }
 
-function connectToSharedWorker(): void {
+function initMainSync(): void {
   if (!networkWorker || !sharedDoc) return;
 
   const channel = new MessageChannel();
   const port = channel.port1;
-  networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
+  // Stash port2 for deferred transfer after SharedWorker is ready
+  uiSyncPort2 = channel.port2;
 
   const workerProv = new WorkerSyncProvider(sharedDoc, port);
   workerProv.connect('ui-main-thread', 'ui');
 
-  log.info('main thread connected to shared worker');
+  log.info('main thread sync pipe ready — doc listener active');
+}
+
+function finishSharedWorkerConnection(): void {
+  if (!networkWorker || !uiSyncPort2) return;
+
+  // Transfer the stashed port2 now that SharedWorker's onconnect has fired
+  networkWorker.port.postMessage({ type: 'ui', payload: {} }, [uiSyncPort2]);
+  uiSyncPort2 = null;
+
+  log.info('main thread port transferred to shared worker');
 
   connectAgentWorker(sentinelWorkerRef, 'sentinel');
   connectAgentWorker(nodeWorkerRef, 'worker');
@@ -236,6 +249,11 @@ function mountUI(): void {
 }
 
 async function initPersistence(): Promise<void> {
+  const opfsAvailable = typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
+  if (!opfsAvailable) {
+    log.warn('OPFS not available — persistence and event log disabled');
+    return;
+  }
   try {
     await initDatabase();
     await initEventLog();
@@ -251,6 +269,8 @@ function startSessionCheckpoints(doc: Y.Doc): () => void {
 }
 
 async function loadSessionState(): Promise<Uint8Array | null> {
+  const opfsAvailable = typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
+  if (!opfsAvailable) return null;
   try {
     await initDatabase();
     await initCheckpoints();
@@ -268,16 +288,22 @@ async function init(): Promise<void> {
 
   const existingState = await loadSessionState();
   initSyncProvider(existingState ?? undefined);
+  initMainSync();                     // doc.on('update') listener active NOW
   mountUI();
 
-  await initPersistence();
-  if (sharedDoc) {
-    startSessionCheckpoints(sharedDoc);
-    captureYDocUpdate(sharedDoc, 'ui-main-thread', null);
+  const opfsAvailable = typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
+  if (opfsAvailable) {
+    await initPersistence();
+    if (sharedDoc) {
+      startSessionCheckpoints(sharedDoc);
+      captureYDocUpdate(sharedDoc, 'ui-main-thread', null);
+    }
+  } else {
+    log.warn('OPFS not available — persistence, checkpoints, and event log disabled');
   }
 
   setTimeout(() => {
-    connectToSharedWorker();
+    finishSharedWorkerConnection();   // transfer port + connect workers
   }, 200);
 }
 

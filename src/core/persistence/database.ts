@@ -4,9 +4,22 @@ import type { Database } from '@sqlite.org/sqlite-wasm';
 const log = createLogger('database');
 
 let db: Database | null = null;
+let opfsAvailable: boolean | null = null;
 
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
+
+  if (opfsAvailable === null) {
+    opfsAvailable = typeof navigator !== 'undefined'
+      && typeof navigator.storage?.getDirectory === 'function';
+    if (!opfsAvailable) {
+      log.warn('OPFS not available — persistence disabled');
+      return null as unknown as Database;
+    }
+  }
+  if (!opfsAvailable) {
+    return null as unknown as Database;
+  }
 
   const sqlite3 = await import('@sqlite.org/sqlite-wasm');
 
