@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { MeshGraph } from '@ui/components/MeshGraph';
 import { PromptInput } from '@ui/components/PromptInput';
 import { TelemetryPanel } from '@ui/components/TelemetryPanel';
@@ -6,6 +6,7 @@ import { WorkflowView } from '@ui/components/WorkflowView';
 import { BlackboardDebugger } from '@ui/components/BlackboardDebugger';
 import { useBlackboard } from '@ui/hooks/useBlackboard';
 import { useNetworkHealth } from '@ui/hooks/useMesh';
+import { usePromptSubmit } from '@ui/hooks/usePromptSubmit';
 import '@ui/styles/main.css';
 
 interface MeshNodeUI {
@@ -37,6 +38,7 @@ interface WorkflowUI {
 export const App: React.FC = () => {
   const { nodes, workflows, telemetry } = useBlackboard();
   const networkHealth = useNetworkHealth();
+  const { onSubmit } = usePromptSubmit();
 
   const meshNodes: MeshNodeUI[] = useMemo(() => {
     const result: MeshNodeUI[] = [];
@@ -88,15 +90,6 @@ export const App: React.FC = () => {
     return result;
   }, [workflows]);
 
-  const handlePromptSubmit = useCallback(
-    (prompt: string) => {
-      // In production: this writes to the blackboard,
-      // the Sentinel agent picks it up and builds the DAG
-      console.log('Prompt submitted:', prompt);
-    },
-    [],
-  );
-
   return (
     <div className="app">
       <header className="app__header">
@@ -124,7 +117,7 @@ export const App: React.FC = () => {
 
       <div className="app__grid">
         <div className="app__main">
-          <PromptInput onSubmit={handlePromptSubmit} disabled={false} />
+          <PromptInput onSubmit={onSubmit} disabled={false} />
 
           <div style={{ marginTop: 24 }}>
             {workflowList.map((w) => (
