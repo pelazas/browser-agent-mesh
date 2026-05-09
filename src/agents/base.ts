@@ -33,6 +33,10 @@ export abstract class BaseAgent {
     this.log.info('connected to mesh');
   }
 
+  protected publishTool(name: string, description: string, schema: Record<string, unknown>): void {
+    this.provider?.publishTool(name, description, schema);
+  }
+
   async start(): Promise<void> {
     this.running = true;
     this.log.info('agent started');

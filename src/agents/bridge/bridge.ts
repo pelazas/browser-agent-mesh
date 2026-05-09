@@ -1,3 +1,4 @@
+import * as Y from 'yjs';
 import { BaseAgent } from '../base';
 import { getActiveWorkflows } from '@core/blackboard/root-doc';
 import { createLogger } from '@utils/logging';

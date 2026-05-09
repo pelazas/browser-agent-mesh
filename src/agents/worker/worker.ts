@@ -1,9 +1,9 @@
+import * as Y from 'yjs';
 import { BaseAgent } from '../base';
-import { getActiveWorkflows, getNodes } from '@core/blackboard/root-doc';
+import { getActiveWorkflows } from '@core/blackboard/root-doc';
 import { acquireLock, releaseLock } from '@core/blackboard/lock';
-import type { GPUProfile, TaskNode } from '@core/blackboard/schema';
-import { getEngineStatus, getCurrentModel, getAvailableModels, selectBestModel } from '@webllm';
-import { TaskScheduler, type NodeCapability } from '@core/graph';
+import type { Edge, GPUProfile, TaskNode } from '@core/blackboard/schema';
+import { getEngineStatus, selectBestModel } from '@webllm/index';
 import { DAG } from '@core/graph/dag';
 
 interface NodeConfig {
@@ -12,12 +12,10 @@ interface NodeConfig {
 
 export class NodeWorkerAgent extends BaseAgent {
   private gpuProfile: GPUProfile | null;
-  private scheduler: TaskScheduler;
 
   constructor(config: NodeConfig) {
     super({ role: 'worker' });
     this.gpuProfile = config.gpuProfile;
-    this.scheduler = new TaskScheduler();
   }
 
   protected async run(): Promise<void> {
@@ -65,7 +63,7 @@ export class NodeWorkerAgent extends BaseAgent {
 
       const dag = DAG.fromJSON({
         nodes: nodesArray,
-        edges: edges.toJSON() as unknown as { id: string; source: string; target: string; type: string }[],
+        edges: edges.toJSON() as unknown as Edge[],
       });
 
       const readyTasks = dag.getReadyTasks();

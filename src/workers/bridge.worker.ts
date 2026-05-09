@@ -1,46 +1,48 @@
 import { createLogger } from '@utils/logging';
-import { createLocalDoc, WorkerSyncProvider } from '@core/blackboard/worker-provider';
-import { generateId } from '@utils/id';
+import { BridgeAgent } from '@agents/bridge/bridge';
 
 const log = createLogger('bridge-worker');
 
-const nodeId = generateId();
-const doc = createLocalDoc();
-let provider: WorkerSyncProvider | null = null;
+class BridgeWorkerAgent extends BridgeAgent {
+  registerTools(): void {
+    this.publishTool('web_scrape', 'Scrape content from a URL', {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The URL to scrape' },
+        selector: { type: 'string', description: 'CSS selector to extract' },
+      },
+      required: ['url'],
+    });
+
+    this.publishTool('opfs_read', 'Read a file from OPFS storage', {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path relative to OPFS root' },
+      },
+      required: ['path'],
+    });
+
+    this.publishTool('opfs_write', 'Write a file to OPFS storage', {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path relative to OPFS root' },
+        content: { type: 'string', description: 'File content' },
+      },
+      required: ['path', 'content'],
+    });
+  }
+}
+
+let agent: BridgeWorkerAgent | null = null;
 
 function init(port: MessagePort): void {
-  provider = new WorkerSyncProvider(doc, port);
-  provider.connect(nodeId, 'bridge');
+  agent = new BridgeWorkerAgent();
+  agent.connect(port);
+  agent.registerTools();
+  void agent.start().catch((err) => log.error('agent failed', { error: String(err) }));
 
-  // Register available tools
-  provider.publishTool('web_scrape', 'Scrape content from a URL', {
-    type: 'object',
-    properties: {
-      url: { type: 'string', description: 'The URL to scrape' },
-      selector: { type: 'string', description: 'CSS selector to extract' },
-    },
-    required: ['url'],
-  });
-
-  provider.publishTool('opfs_read', 'Read a file from OPFS storage', {
-    type: 'object',
-    properties: {
-      path: { type: 'string', description: 'File path relative to OPFS root' },
-    },
-    required: ['path'],
-  });
-
-  provider.publishTool('opfs_write', 'Write a file to OPFS storage', {
-    type: 'object',
-    properties: {
-      path: { type: 'string', description: 'File path relative to OPFS root' },
-      content: { type: 'string', description: 'File content' },
-    },
-    required: ['path', 'content'],
-  });
-
-  log.info('bridge worker initialized', { nodeId });
-  self.postMessage({ type: 'ready', nodeId });
+  log.info('bridge worker initialized');
+  self.postMessage({ type: 'ready', role: 'bridge' });
 }
 
 self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort }>) => {

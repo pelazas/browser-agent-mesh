@@ -1,3 +1,4 @@
+import * as Y from 'yjs';
 import { BaseAgent } from '../base';
 import { getActiveWorkflows } from '@core/blackboard/root-doc';
 import { DAG } from '@core/graph';
@@ -82,6 +83,6 @@ export class SynthesizerAgent extends BaseAgent {
     workflow.set('state', 'completed');
     workflow.set('updatedAt', Date.now());
 
-    this.log.info('workflow synthesized', { workflowId, taskResults: results.length });
+    this.log.info('workflow synthesized', { workflowId, taskResults: results.length, synthesis });
   }
 }

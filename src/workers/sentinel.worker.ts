@@ -1,20 +1,17 @@
 import { createLogger } from '@utils/logging';
-import { createLocalDoc, WorkerSyncProvider } from '@core/blackboard/worker-provider';
-import { generateId } from '@utils/id';
+import { SentinelAgent } from '@agents/sentinel/sentinel';
 
 const log = createLogger('sentinel-worker');
 
-const nodeId = generateId();
-const doc = createLocalDoc();
-let provider: WorkerSyncProvider | null = null;
+let agent: SentinelAgent | null = null;
 
 self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort; config?: unknown }>) => {
   if (e.data.type === 'init') {
-    const port = e.data.port;
-    provider = new WorkerSyncProvider(doc, port);
-    provider.connect(nodeId, 'sentinel');
-    log.info('sentinel worker initialized', { nodeId });
+    agent = new SentinelAgent();
+    agent.connect(e.data.port);
+    void agent.start().catch((err) => log.error('agent failed', { error: String(err) }));
+    log.info('sentinel worker initialized');
   }
 };
 
-self.postMessage({ type: 'ready', nodeId });
+self.postMessage({ type: 'ready', role: 'sentinel' });
