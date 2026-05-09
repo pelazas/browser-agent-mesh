@@ -3,14 +3,17 @@ import { createRoot } from 'react-dom/client';
 import * as Y from 'yjs';
 import { App } from '@ui/App';
 import { BlackboardContext } from '@ui/context/BlackboardContext';
-import { createLocalDoc, WorkerSyncProvider } from '@core/blackboard/worker-provider';
+import { WorkerSyncProvider } from '@core/blackboard/worker-provider';
 import { getRootMap, getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
-import { YjsSyncProvider, type SyncDebugState } from '@core/network/sync';
+import { YjsSyncProvider } from '@core/network/sync';
 import { createLogger } from '@utils/logging';
 
 const log = createLogger('main');
 
 let networkWorker: SharedWorker | null = null;
+let syncProvider: YjsSyncProvider | null = null;
+let sharedDoc: Y.Doc | null = null;
+let connected = false;
 
 function detectCapabilities() {
   const hasWebGPU = 'gpu' in navigator;
@@ -90,112 +93,101 @@ function bootstrapWorkers(): void {
   }
 }
 
-interface MeshRoot {
-  blackboardDoc: Y.Doc | null;
-  connected: boolean;
-  connectToSharedWorker: () => void;
+function initSyncProvider(): void {
+  const signalingUrl = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:4444';
+  const roomName = 'browser-agent-mesh';
+
+  syncProvider = new YjsSyncProvider({ signalingUrl, roomName });
+  syncProvider.registerSelfAsNode('ui', null);
+  sharedDoc = syncProvider.getDoc();
+
+  const networkState = {
+    peerCount: 0,
+    signalingConnected: false,
+    synced: false,
+    webrtcPeers: [] as string[],
+    awarenessStates: 0,
+    rtcPeerConnectionAvailable: typeof RTCPeerConnection !== 'undefined',
+    lastUpdate: 0,
+    eventTimeline: [] as Array<{ time: number; event: string; detail: unknown }>,
+    dump() {
+      return structuredClone({
+        peerCount: this.peerCount,
+        signalingConnected: this.signalingConnected,
+        synced: this.synced,
+        webrtcPeers: this.webrtcPeers,
+        awarenessStates: this.awarenessStates,
+        rtcAvailable: this.rtcPeerConnectionAvailable,
+        lastUpdate: this.lastUpdate,
+        eventTimeline: this.eventTimeline,
+      });
+    },
+    checkConnection(): string {
+      if (!this.rtcPeerConnectionAvailable) {
+        return 'RTCPeerConnection NOT available in this context. WebRTC cannot work.';
+      }
+      if (!this.signalingConnected) {
+        return 'Signaling NOT connected. Check that the signaling server is running and reachable.';
+      }
+      if (this.webrtcPeers.length === 0 && this.awarenessStates <= 1) {
+        return `Signaling connected, but no WebRTC peers discovered yet. If another tab is open on the same origin, peer discovery should happen within seconds.
+Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
+      }
+      if (this.webrtcPeers.length > 0 && this.peerCount === 0) {
+        return 'WebRTC peers connected but awareness not synced yet. Should resolve in a few seconds.';
+      }
+      return `Connected: ${this.peerCount} peer(s), ${this.webrtcPeers.length} WebRTC connection(s), ${this.awarenessStates} awareness states.`;
+    },
+  };
+  (window as unknown as Record<string, unknown>).__MESH_NETWORK__ = networkState;
+
+  syncProvider.onPeersChanged((count) => {
+    networkState.peerCount = count;
+    networkState.lastUpdate = Date.now();
+    connected = count > 0;
+  });
+
+  setInterval(() => {
+    if (!syncProvider) return;
+    const state = syncProvider.getDebugState();
+    const count = syncProvider.getPeerCount();
+    networkState.peerCount = count;
+    networkState.signalingConnected = state.signalingConnected;
+    networkState.synced = state.synced;
+    networkState.webrtcPeers = state.webrtcPeers;
+    networkState.awarenessStates = state.awarenessStates;
+    networkState.rtcPeerConnectionAvailable = state.rtcPeerConnectionAvailable;
+    networkState.eventTimeline = state.eventTimeline;
+    if (state.signalingConnected || state.webrtcPeers.length > 0) {
+      networkState.lastUpdate = Date.now();
+    }
+    connected = count > 0;
+  }, 1000);
+
+  (window as unknown as Record<string, unknown>).__MESH_DOC__ = sharedDoc;
+  (window as unknown as Record<string, unknown>).__MESH_BLACKBOARD__ = {
+    getRootMap: () => getRootMap(sharedDoc!),
+    getNodes: () => [...getNodes(sharedDoc!)],
+    getWorkflows: () => [...getActiveWorkflows(sharedDoc!)],
+    getTelemetry: () => [...getTelemetry(sharedDoc!)],
+    dump: () => getRootMap(sharedDoc!).toJSON(),
+  };
+
+  log.info('sync provider created in main thread', { room: roomName });
 }
 
-const meshState: MeshRoot = {
-  blackboardDoc: null,
-  connected: false,
-  connectToSharedWorker() {
-    const signalingUrl = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:4444';
-    const roomName = 'browser-agent-mesh';
+function connectToSharedWorker(): void {
+  if (!networkWorker || !sharedDoc) return;
 
-    const sync = new YjsSyncProvider({ signalingUrl, roomName });
-    sync.registerSelfAsNode('ui', null);
+  const channel = new MessageChannel();
+  const port = channel.port1;
+  networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
 
-    const doc = sync.getDoc();
-    this.blackboardDoc = doc;
+  const workerProv = new WorkerSyncProvider(sharedDoc, port);
+  workerProv.connect('ui-main-thread', 'ui');
 
-    const networkState = {
-      peerCount: 0,
-      signalingConnected: false,
-      synced: false,
-      webrtcPeers: [] as string[],
-      awarenessStates: 0,
-      rtcPeerConnectionAvailable: typeof RTCPeerConnection !== 'undefined',
-      lastUpdate: 0,
-      eventTimeline: [] as Array<{ time: number; event: string; detail: unknown }>,
-      dump() {
-        return structuredClone({
-          peerCount: this.peerCount,
-          signalingConnected: this.signalingConnected,
-          synced: this.synced,
-          webrtcPeers: this.webrtcPeers,
-          awarenessStates: this.awarenessStates,
-          rtcAvailable: this.rtcPeerConnectionAvailable,
-          lastUpdate: this.lastUpdate,
-          eventTimeline: this.eventTimeline,
-        });
-      },
-      checkConnection(): string {
-        if (!this.rtcPeerConnectionAvailable) {
-          return 'RTCPeerConnection NOT available in this context. WebRTC cannot work.';
-        }
-        if (!this.signalingConnected) {
-          return 'Signaling NOT connected. Check that the signaling server is running and reachable.';
-        }
-        if (this.webrtcPeers.length === 0 && this.awarenessStates <= 1) {
-          return `Signaling connected, but no WebRTC peers discovered yet. If another tab is open on the same origin, peer discovery should happen within seconds.
-Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
-        }
-        if (this.webrtcPeers.length > 0 && this.peerCount === 0) {
-          return 'WebRTC peers connected but awareness not synced yet. Should resolve in a few seconds.';
-        }
-        return `Connected: ${this.peerCount} peer(s), ${this.webrtcPeers.length} WebRTC connection(s), ${this.awarenessStates} awareness states.`;
-      },
-    };
-    (window as unknown as Record<string, unknown>).__MESH_NETWORK__ = networkState;
-
-    sync.onPeersChanged((count) => {
-      networkState.peerCount = count;
-      networkState.lastUpdate = Date.now();
-      this.connected = count > 0;
-    });
-
-    setInterval(() => {
-      const state = sync.getDebugState();
-      const count = sync.getPeerCount();
-      networkState.peerCount = count;
-      networkState.signalingConnected = state.signalingConnected;
-      networkState.synced = state.synced;
-      networkState.webrtcPeers = state.webrtcPeers;
-      networkState.awarenessStates = state.awarenessStates;
-      networkState.rtcPeerConnectionAvailable = state.rtcPeerConnectionAvailable;
-      networkState.eventTimeline = state.eventTimeline;
-      if (state.signalingConnected || state.webrtcPeers.length > 0) {
-        networkState.lastUpdate = Date.now();
-      }
-      this.connected = count > 0;
-    }, 1000);
-
-    // Expose for console inspection
-    (window as unknown as Record<string, unknown>).__MESH_DOC__ = doc;
-    (window as unknown as Record<string, unknown>).__MESH_BLACKBOARD__ = {
-      getRootMap: () => getRootMap(doc),
-      getNodes: () => [...getNodes(doc)],
-      getWorkflows: () => [...getActiveWorkflows(doc)],
-      getTelemetry: () => [...getTelemetry(doc)],
-      dump: () => getRootMap(doc).toJSON(),
-    };
-
-    log.info('sync provider created in main thread', { room: roomName });
-
-    // Connect to SharedWorker for agent routing
-    if (!networkWorker) return;
-
-    const channel = new MessageChannel();
-    const port = channel.port1;
-    networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
-
-    const workerProv = new WorkerSyncProvider(doc, port);
-    workerProv.connect('ui-main-thread', 'ui');
-
-    log.info('main thread connected to shared worker');
-  },
-};
+  log.info('main thread connected to shared worker');
+}
 
 function mountUI(): void {
   const container = document.getElementById('root');
@@ -208,22 +200,22 @@ function mountUI(): void {
   root.render(
     React.createElement(
       BlackboardContext.Provider,
-      { value: { doc: meshState.blackboardDoc, connected: meshState.connected } },
+      { value: { doc: sharedDoc, connected } },
       React.createElement(App),
     ),
   );
-  log.info('UI mounted');
+  log.info('UI mounted', { hasDoc: !!sharedDoc });
 }
 
 async function init(): Promise<void> {
   log.info('browser agent mesh initializing');
 
   bootstrapWorkers();
+  initSyncProvider();
   mountUI();
 
-  // Brief delay before creating sync provider to let shared worker start
   setTimeout(() => {
-    meshState.connectToSharedWorker();
+    connectToSharedWorker();
   }, 200);
 }
 
