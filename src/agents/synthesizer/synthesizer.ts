@@ -2,10 +2,13 @@ import * as Y from 'yjs';
 import { BaseAgent } from '../base';
 import { getActiveWorkflows } from '@core/blackboard/root-doc';
 import { DAG } from '@core/graph';
+import { completeWorkflow, failWorkflow } from '@core/blackboard/task-state';
+import type { Edge, TaskNode } from '@core/blackboard/schema';
+import { consolidate, deduplicate, mergeByConfidence } from '@agents/synthesizer/reducer';
 
 export class SynthesizerAgent extends BaseAgent {
-  constructor() {
-    super({ role: 'synthesizer' });
+  constructor(doc?: Y.Doc) {
+    super({ role: 'synthesizer', doc });
   }
 
   protected async run(): Promise<void> {
@@ -20,41 +23,10 @@ export class SynthesizerAgent extends BaseAgent {
   private async checkForReadyWorkflows(): Promise<void> {
     const workflows = getActiveWorkflows(this.doc);
 
-    for (const [workflowId] of workflows) {
-      const workflow = workflows.get(workflowId);
+    for (const [workflowId, workflow] of workflows) {
       if (!workflow) continue;
 
-      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-      if (!dagMap) continue;
-
-      const edges = workflow.get('edges') as Y.Array<unknown>;
-
-      const nodesArray: { id: string; status: string }[] = [];
-      for (const [nodeId, nodeEntry] of dagMap) {
-        nodesArray.push({
-          id: nodeId,
-          ...(nodeEntry.toJSON() as Record<string, unknown>),
-        } as { id: string; status: string });
-      }
-
-      const dag = DAG.fromJSON({
-        nodes: nodesArray.map((n) => ({
-          id: n.id,
-          type: 'reduce' as const,
-          description: '',
-          status: n.status as 'pending' | 'completed' | 'failed',
-          claimedBy: null,
-          args: {},
-          result: null,
-          error: null,
-          createdAt: 0,
-          startedAt: null,
-          completedAt: null,
-        })),
-        edges: edges.toJSON() as [],
-      });
-
-      if (dag.isComplete() && !dag.hasFailed()) {
+      if (this.isSynthesizable(workflow)) {
         await this.synthesize(workflowId);
       }
     }
@@ -66,23 +38,107 @@ export class SynthesizerAgent extends BaseAgent {
     const workflow = getActiveWorkflows(this.doc).get(workflowId);
     if (!workflow) return;
 
-    // Collect results from all completed tasks
-    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-    const results: string[] = [];
+    try {
+      const dag = this.readWorkflowDag(workflow);
+      const orderedTaskIds = dag.topologicalOrder();
+      const completedNodes = orderedTaskIds
+        .map((taskId) => dag.getNode(taskId))
+        .filter((node): node is TaskNode => node !== undefined)
+        .filter((node) => node.status === 'completed' && node.result !== null);
 
-    for (const [, nodeEntry] of dagMap) {
-      const data = nodeEntry.toJSON() as Record<string, unknown>;
-      if (data.result) {
-        results.push(JSON.stringify(data.result));
+      if (completedNodes.length === 0) {
+        const error = 'Workflow is ready for synthesis but no completed task results were found';
+        failWorkflow(this.doc, workflowId, error);
+        this.log.warn('workflow synthesis failed', { workflowId, error });
+        return;
       }
+
+      const rawFragments = completedNodes.map((node) => ({
+        taskId: node.id,
+        content: node.result,
+        confidence: this.readConfidence(node.result),
+      }));
+      const deduplicatedFragments = deduplicate(rawFragments);
+      const fragments = mergeByConfidence(deduplicatedFragments);
+
+      if (fragments.length === 0) {
+        const error = 'Workflow is ready for synthesis but all task results were filtered out';
+        failWorkflow(this.doc, workflowId, error);
+        this.log.warn('workflow synthesis failed', { workflowId, error, rawCount: rawFragments.length });
+        return;
+      }
+
+      const content = await consolidate(fragments);
+      const result = {
+        type: 'synthesis_result' as const,
+        content,
+        fragments,
+        metadata: {
+          totalCompletedTasks: completedNodes.length,
+          deduplicatedCount: deduplicatedFragments.length,
+          fragmentCount: fragments.length,
+          confidenceThreshold: 0.5,
+        },
+      };
+
+      const completed = completeWorkflow(this.doc, workflowId, result);
+      this.log.info('workflow synthesized', {
+        workflowId,
+        completed,
+        completedTaskResults: completedNodes.length,
+        deduplicatedResults: deduplicatedFragments.length,
+        fragmentCount: fragments.length,
+      });
+    } catch (err) {
+      const error = `Workflow synthesis failed: ${String(err)}`;
+      failWorkflow(this.doc, workflowId, error);
+      this.log.error('workflow synthesis threw', { workflowId, error });
+    }
+  }
+
+  private isSynthesizable(workflow: Y.Map<unknown>): boolean {
+    const state = workflow.get('state');
+    const taskCount = workflow.get('taskCount');
+    const completedCount = workflow.get('completedCount');
+    const failedCount = workflow.get('failedCount');
+
+    return state === 'active'
+      && typeof taskCount === 'number'
+      && typeof completedCount === 'number'
+      && typeof failedCount === 'number'
+      && taskCount > 0
+      && failedCount === 0
+      && completedCount === taskCount;
+  }
+
+  private readWorkflowDag(workflow: Y.Map<unknown>): DAG {
+    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>> | undefined;
+    const edges = workflow.get('edges') as Y.Array<unknown> | undefined;
+
+    if (!dagMap || !edges) {
+      throw new Error('Workflow is missing DAG data');
     }
 
-    // In production: run LLM to synthesize findings
-    const synthesis = `Workflow ${workflowId} complete. ${results.length} tasks produced results.`;
+    const nodes: TaskNode[] = [];
+    for (const [taskId, nodeEntry] of dagMap) {
+      nodes.push({
+        id: taskId,
+        ...(nodeEntry.toJSON() as Omit<TaskNode, 'id'>),
+      });
+    }
 
-    workflow.set('state', 'completed');
-    workflow.set('updatedAt', Date.now());
+    return DAG.fromJSON({
+      nodes,
+      edges: edges.toJSON() as Edge[],
+    });
+  }
 
-    this.log.info('workflow synthesized', { workflowId, taskResults: results.length, synthesis });
+  private readConfidence(result: unknown): number {
+    if (typeof result !== 'object' || result === null) {
+      return 1;
+    }
+
+    const confidence = (result as { confidence?: unknown }).confidence;
+    return typeof confidence === 'number' ? confidence : 1;
   }
 }

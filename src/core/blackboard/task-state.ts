@@ -15,6 +15,10 @@ function getWorkflowAndNode(doc: Y.Doc, workflowId: string, taskId: string): {
   return { workflow, node };
 }
 
+function getWorkflow(doc: Y.Doc, workflowId: string): Y.Map<unknown> | null {
+  return getActiveWorkflows(doc).get(workflowId) ?? null;
+}
+
 export function markTaskRunning(doc: Y.Doc, workflowId: string, taskId: string, nodeId: string): boolean {
   const target = getWorkflowAndNode(doc, workflowId, taskId);
   if (!target) return false;
@@ -63,4 +67,45 @@ export function failTask(doc: Y.Doc, workflowId: string, taskId: string, error: 
   });
 
   return true;
+}
+
+export function completeWorkflow(doc: Y.Doc, workflowId: string, result: unknown): boolean {
+  const workflow = getWorkflow(doc, workflowId);
+  if (!workflow) return false;
+
+  let completed = false;
+
+  doc.transact(() => {
+    if (workflow.get('state') !== 'active') return;
+
+    const now = Date.now();
+    workflow.set('state', 'completed');
+    workflow.set('result', result);
+    workflow.set('error', null);
+    workflow.set('completedAt', now);
+    workflow.set('updatedAt', now);
+    completed = true;
+  });
+
+  return completed;
+}
+
+export function failWorkflow(doc: Y.Doc, workflowId: string, error: string): boolean {
+  const workflow = getWorkflow(doc, workflowId);
+  if (!workflow) return false;
+
+  let failed = false;
+
+  doc.transact(() => {
+    if (workflow.get('state') !== 'active') return;
+
+    const now = Date.now();
+    workflow.set('state', 'failed');
+    workflow.set('error', error);
+    workflow.set('completedAt', now);
+    workflow.set('updatedAt', now);
+    failed = true;
+  });
+
+  return failed;
 }

@@ -1,4 +1,4 @@
-import type { Y } from 'yjs';
+import type * as Y from 'yjs';
 
 export type AgentRole = 'sentinel' | 'worker' | 'bridge' | 'synthesizer';
 
@@ -63,10 +63,13 @@ export interface WorkflowEntry {
   state: WorkflowState;
   createdAt: number;
   updatedAt: number;
+  completedAt: number | null;
   ownerNodeId: string;
   taskCount: number;
   completedCount: number;
   failedCount: number;
+  result: unknown | null;
+  error: string | null;
 }
 
 export interface PromptRequestEntry {

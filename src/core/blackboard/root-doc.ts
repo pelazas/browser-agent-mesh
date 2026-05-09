@@ -70,10 +70,13 @@ export function createWorkflow(doc: Y.Doc, workflowId: string, ownerNodeId: stri
   workflow.set('state', 'active');
   workflow.set('createdAt', Date.now());
   workflow.set('updatedAt', Date.now());
+  workflow.set('completedAt', null);
   workflow.set('ownerNodeId', ownerNodeId);
   workflow.set('taskCount', 0);
   workflow.set('completedCount', 0);
   workflow.set('failedCount', 0);
+  workflow.set('result', null);
+  workflow.set('error', null);
   workflow.set('dag', new Y.Map<Y.Map<unknown>>());
   workflow.set('edges', new Y.Array<unknown>());
   workflow.set('locks', new Y.Map<Y.Map<unknown>>());
