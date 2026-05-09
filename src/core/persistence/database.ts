@@ -11,7 +11,7 @@ export async function initDatabase(): Promise<Database> {
   const sqlite3 = await import('@sqlite.org/sqlite-wasm');
 
   const sqlite = await sqlite3.default({
-    locateFile: (path: string) => path,
+    locateFile: (_path: string) => '/node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
     init: (api: unknown) => {
       log.info('sqlite wasm initialized');
     },
