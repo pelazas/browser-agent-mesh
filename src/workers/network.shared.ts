@@ -17,6 +17,11 @@ interface AgentPort {
 
 const agentPorts: Map<string, AgentPort> = new Map();
 
+// Queue for sync updates that arrive before any agent is connected.
+// Delivered to each newly connecting agent so late workers do not miss state.
+const pendingUpdates: Uint8Array[] = [];
+const MAX_PENDING_UPDATES = 100;
+
 const nodeId = generateId();
 const doc: Y.Doc = createRootDoc();
 
@@ -94,6 +99,22 @@ function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string)
       port.postMessage({ type: 'connect_ack', payload: { stateVector: update } });
       msgCount.sent++;
 
+      if (pendingUpdates.length > 0) {
+        log.info('replaying pending updates to new agent', {
+          nodeId,
+          count: pendingUpdates.length,
+        });
+        for (const pendingUpdate of pendingUpdates) {
+          try {
+            port.postMessage({ type: 'sync_update', payload: { update: pendingUpdate } });
+            msgCount.sent++;
+          } catch {
+            msgCount.errors++;
+            log.warn('failed to replay sync_update', { targetAgent: nodeId });
+          }
+        }
+      }
+
       log.info('agent connected', { nodeId, role, totalAgents: agentPorts.size });
       return;
     }
@@ -103,16 +124,25 @@ function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string)
     if (type === 'sync_update') {
       const { update } = payload as { update: Uint8Array };
       Y.applyUpdate(doc, update);
+      let forwardedCount = 0;
       for (const [id, agent] of agentPorts) {
         if (id !== senderId) {
           try {
             agent.port.postMessage({ type: 'sync_update', payload: { update } });
             msgCount.sent++;
+            forwardedCount++;
           } catch {
             msgCount.errors++;
             log.warn('failed to forward sync_update', { targetAgent: id });
           }
         }
+      }
+      if (forwardedCount === 0) {
+        if (pendingUpdates.length >= MAX_PENDING_UPDATES) {
+          pendingUpdates.shift();
+        }
+        pendingUpdates.push(update);
+        log.info('queued sync_update for late agents', { queueSize: pendingUpdates.length });
       }
     }
 
