@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { YjsSyncProvider, type SyncDebugState } from '@core/network/sync';
+import { createRootDoc } from '@core/blackboard/root-doc';
 import { SwarmNode } from '@core/network/swarm';
 import { MCPServer } from '@core/network/mcp/server';
 import { GossipTelemetry } from '@core/network/gossip';
@@ -17,22 +17,9 @@ interface AgentPort {
 const agentPorts: Map<string, AgentPort> = new Map();
 
 const nodeId = generateId();
-const signalingUrl = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:4444';
-const roomName = 'browser-agent-mesh';
-
 const startTime = Date.now();
 
-log.info('shared worker context info', {
-  rtcPeerConnectionExists: typeof RTCPeerConnection !== 'undefined',
-  broadcastChannelExists: typeof BroadcastChannel !== 'undefined',
-  navigatorExists: typeof navigator !== 'undefined',
-  nodeId,
-});
-
-const sync = new YjsSyncProvider({
-  signalingUrl,
-  roomName,
-});
+const doc: Y.Doc = createRootDoc();
 
 const gossiper = new GossipTelemetry({
   publishIntervalMs: 10_000,
@@ -43,37 +30,14 @@ const mcpServer = new MCPServer();
 
 let swarm: SwarmNode | null = null;
 
-// Message counters for observability
 let msgCount = { received: 0, sent: 0, errors: 0 };
 
-function broadcastDebugState(state: SyncDebugState): void {
-  const msg = { type: 'debug_state', payload: { state, workerNodeId: nodeId, startTime, msgCount } };
-  for (const [, agent] of agentPorts) {
-    try {
-      agent.port.postMessage(msg);
-    } catch {
-      // Port might be closed
-    }
-  }
-}
-
-function broadcastPeerCount(count: number): void {
-  const msg = { type: 'peers_update', payload: { count } };
-  for (const [, agent] of agentPorts) {
-    try {
-      agent.port.postMessage(msg);
-    } catch {
-      // Port might be closed
-    }
-  }
-}
-
 async function init(): Promise<void> {
-  log.info('network shared worker starting', { nodeId, url: signalingUrl, room: roomName });
-
-  sync.registerSelfAsNode('sentinel', null);
-
-  const doc = sync.getDoc();
+  log.info('network shared worker starting', {
+    nodeId,
+    rtcPeerConnectionExists: typeof RTCPeerConnection !== 'undefined',
+    broadcastChannelExists: typeof BroadcastChannel !== 'undefined',
+  });
 
   gossiper.setPublisher(async (data) => {
     if (swarm) {
@@ -82,33 +46,6 @@ async function init(): Promise<void> {
   });
 
   gossiper.start();
-
-  sync.onPeersChanged((count) => {
-    log.info('peer count changed', { count });
-    broadcastPeerCount(count);
-  });
-
-  // Broadcast full debug state every 2 seconds
-  setInterval(() => {
-    const state = sync.getDebugState();
-    broadcastDebugState(state);
-    broadcastPeerCount(sync.getPeerCount());
-  }, 2000);
-
-  // Log connection state every 10 seconds for visibility
-  setInterval(() => {
-    const state = sync.getDebugState();
-    log.info('connection summary', {
-      signalingConnected: state.signalingConnected,
-      synced: state.synced,
-      webrtcPeers: state.webrtcPeers,
-      awarenessStates: state.awarenessStates,
-      peerCount: sync.getPeerCount(),
-      rtcAvailable: state.rtcPeerConnectionAvailable,
-      agentPortCount: agentPorts.size,
-      uptime: (Date.now() - startTime) / 1000,
-    });
-  }, 10_000);
 
   log.info('network shared worker initialized');
 }
@@ -123,8 +60,7 @@ self.onconnect = (e: MessageEvent) => {
 
   handleAgentPort(port, agentNodeId, 'agent');
 
-  // Send initial snapshot
-  const update = Y.encodeStateAsUpdate(sync.getDoc());
+  const update = Y.encodeStateAsUpdate(doc);
   port.postMessage({
     type: 'connect_ack',
     payload: { stateVector: update },
@@ -151,29 +87,19 @@ function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string)
       agentPorts.delete(tempId);
       agentPorts.set(nodeId, { port, nodeId, role });
 
-      sync.registerSelfAsNode(role, null);
-
-      const update = Y.encodeStateAsUpdate(sync.getDoc());
+      const update = Y.encodeStateAsUpdate(doc);
       port.postMessage({ type: 'connect_ack', payload: { stateVector: update } });
       msgCount.sent++;
-
-      // Send initial debug state immediately
-      const debugState = sync.getDebugState();
-      port.postMessage({
-        type: 'debug_state',
-        payload: { state: debugState, workerNodeId: nodeId, startTime, msgCount },
-      });
 
       log.info('agent connected', { nodeId, role, totalAgents: agentPorts.size });
       return;
     }
 
-    // Use registeredNodeId or tempId for messages before connect
     const senderId = registeredNodeId ?? tempId;
 
     if (type === 'sync_update') {
       const { update } = payload as { update: Uint8Array };
-      Y.applyUpdate(sync.getDoc(), update);
+      Y.applyUpdate(doc, update);
       for (const [id, agent] of agentPorts) {
         if (id !== senderId) {
           try {

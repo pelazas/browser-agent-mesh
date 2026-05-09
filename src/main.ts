@@ -5,8 +5,8 @@ import { App } from '@ui/App';
 import { BlackboardContext } from '@ui/context/BlackboardContext';
 import { createLocalDoc, WorkerSyncProvider } from '@core/blackboard/worker-provider';
 import { getRootMap, getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
+import { YjsSyncProvider, type SyncDebugState } from '@core/network/sync';
 import { createLogger } from '@utils/logging';
-import type { SyncDebugState } from '@core/network/sync';
 
 const log = createLogger('main');
 
@@ -100,11 +100,14 @@ const meshState: MeshRoot = {
   blackboardDoc: null,
   connected: false,
   connectToSharedWorker() {
-    if (!networkWorker) return;
+    const signalingUrl = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:4444';
+    const roomName = 'browser-agent-mesh';
 
-    const channel = new MessageChannel();
-    const port = channel.port1;
-    networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
+    const sync = new YjsSyncProvider({ signalingUrl, roomName });
+    sync.registerSelfAsNode('ui', null);
+
+    const doc = sync.getDoc();
+    this.blackboardDoc = doc;
 
     const networkState = {
       peerCount: 0,
@@ -129,45 +132,41 @@ const meshState: MeshRoot = {
       },
       checkConnection(): string {
         if (!this.rtcPeerConnectionAvailable) {
-          return 'RTCPeerConnection NOT available in this context. WebRTC cannot work. This is a browser limitation — try running the app in a regular tab (Window context) or check SharedWorker support for RTCPeerConnection.';
+          return 'RTCPeerConnection NOT available in this context. WebRTC cannot work.';
         }
         if (!this.signalingConnected) {
-          return 'Signaling NOT connected. Check that the signaling server is running and reachable at the configured URL.';
+          return 'Signaling NOT connected. Check that the signaling server is running and reachable.';
         }
-        if (this.webrtcPeers.length === 0 && this.awarenessStates === 0) {
-          return `Signaling connected, but no WebRTC peers discovered. Possible causes:
-- NAT/firewall blocking WebRTC (STUN failed)
-- Browser privacy settings blocking WebRTC
-- y-webrtc room collision
-Check SharedWorker console at chrome://inspect/#workers → bam-network for detailed logs.`;
+        if (this.webrtcPeers.length === 0 && this.awarenessStates <= 1) {
+          return `Signaling connected, but no WebRTC peers discovered yet. If another tab is open on the same origin, peer discovery should happen within seconds.
+Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
         }
         if (this.webrtcPeers.length > 0 && this.peerCount === 0) {
-          return 'WebRTC peers connected but awareness not synced yet. This should resolve within a few seconds.';
+          return 'WebRTC peers connected but awareness not synced yet. Should resolve in a few seconds.';
         }
         return `Connected: ${this.peerCount} peer(s), ${this.webrtcPeers.length} WebRTC connection(s), ${this.awarenessStates} awareness states.`;
       },
     };
     (window as unknown as Record<string, unknown>).__MESH_NETWORK__ = networkState;
 
-    const doc = createLocalDoc();
-    const provider = new WorkerSyncProvider(doc, port);
-    provider.onPeersUpdate = (count) => {
+    sync.onPeersChanged((count) => {
       networkState.peerCount = count;
       networkState.lastUpdate = Date.now();
       this.connected = count > 0;
-    };
-    provider.onDebugState = (state: SyncDebugState) => {
+    });
+
+    setInterval(() => {
+      const state = sync.getDebugState();
       networkState.signalingConnected = state.signalingConnected;
       networkState.synced = state.synced;
       networkState.webrtcPeers = state.webrtcPeers;
       networkState.awarenessStates = state.awarenessStates;
       networkState.rtcPeerConnectionAvailable = state.rtcPeerConnectionAvailable;
       networkState.eventTimeline = state.eventTimeline;
-      networkState.lastUpdate = Date.now();
-    };
-    provider.connect('ui-main-thread', 'ui');
-
-    this.blackboardDoc = doc;
+      if (state.signalingConnected || state.webrtcPeers.length > 0) {
+        networkState.lastUpdate = Date.now();
+      }
+    }, 1000);
 
     // Expose for console inspection
     (window as unknown as Record<string, unknown>).__MESH_DOC__ = doc;
@@ -179,28 +178,19 @@ Check SharedWorker console at chrome://inspect/#workers → bam-network for deta
       dump: () => getRootMap(doc).toJSON(),
     };
 
-    log.info('main thread connected to shared worker, doc is live');
+    log.info('sync provider created in main thread', { room: roomName });
 
-    // Diagnostic help
-    const diagState = networkState;
-    setTimeout(() => {
-      const now = Date.now();
-      const elapsed = ((now - diagState.lastUpdate) / 1000).toFixed(1);
-      console.log(
-`%c[Browser Agent Mesh] Diagnostics after 2s wait:
-  signalingConnected: ${diagState.signalingConnected}
-  synced: ${diagState.synced}
-  webrtcPeers: ${JSON.stringify(diagState.webrtcPeers)}
-  awarenessStates: ${diagState.awarenessStates}
-  peerCount: ${diagState.peerCount}
-  rtcAvailable: ${diagState.rtcPeerConnectionAvailable}
-  lastUpdate: ${elapsed}s ago
-  ---
-  Inspect live: window.__MESH_NETWORK__
-  SharedWorker console: chrome://inspect/#workers → bam-network`,
-        'font-family: monospace;',
-      );
-    }, 2500);
+    // Connect to SharedWorker for agent routing
+    if (!networkWorker) return;
+
+    const channel = new MessageChannel();
+    const port = channel.port1;
+    networkWorker.port.postMessage({ type: 'ui', payload: {} }, [channel.port2]);
+
+    const workerProv = new WorkerSyncProvider(doc, port);
+    workerProv.connect('ui-main-thread', 'ui');
+
+    log.info('main thread connected to shared worker');
   },
 };
 
@@ -228,8 +218,7 @@ async function init(): Promise<void> {
   bootstrapWorkers();
   mountUI();
 
-  // Connect main thread to SharedWorker after a brief delay
-  // to ensure the SharedWorker has finished init()
+  // Brief delay before creating sync provider to let shared worker start
   setTimeout(() => {
     meshState.connectToSharedWorker();
   }, 200);
