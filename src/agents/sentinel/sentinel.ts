@@ -9,6 +9,7 @@ interface ParsedTask {
   description: string;
   type: TaskNode['type'];
   dependencies: number[];
+  args?: Record<string, unknown>;
 }
 
 export class SentinelAgent extends BaseAgent {
@@ -135,7 +136,7 @@ export class SentinelAgent extends BaseAgent {
       const id = dag.addNode({
         type: task.type,
         description: task.description,
-        args: { prompt: task.description },
+        args: task.args ?? { prompt: task.description },
       });
       nodeIds.push(id);
     }
@@ -179,10 +180,22 @@ export class SentinelAgent extends BaseAgent {
         dependencies: [1],
       });
     } else if (lower.includes('scrape') || lower.includes('extract')) {
+      const scrapeArgs: Record<string, unknown> = { prompt };
+      const url = this.extractUrlFromText(prompt);
+      if (url) {
+        scrapeArgs.url = url;
+      }
+
+      const selector = this.extractSelectorFromText(prompt);
+      if (selector) {
+        scrapeArgs.selector = selector;
+      }
+
       tasks.push({
         description: 'Scrape target URLs for content',
         type: 'scrape',
         dependencies: [],
+        args: scrapeArgs,
       });
 
       tasks.push({
@@ -212,5 +225,24 @@ export class SentinelAgent extends BaseAgent {
     }
 
     return tasks;
+  }
+
+  private extractUrlFromText(value: string): string | null {
+    const match = value.match(/https?:\/\/[^\s)]+/i);
+    if (!match) return null;
+
+    const candidate = match[0].replace(/[.,!?;:'"\]\}>]+$/u, '');
+
+    try {
+      return new URL(candidate).toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private extractSelectorFromText(value: string): string | null {
+    const match = value.match(/\bselector\b\s*(?::|=)?\s*(?:"([^"]+)"|'([^']+)'|([^\s,;]+))/i);
+    const selector = match?.[1] ?? match?.[2] ?? match?.[3];
+    return selector?.trim() || null;
   }
 }
