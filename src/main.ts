@@ -6,7 +6,7 @@ import { BlackboardContext } from '@ui/context/BlackboardContext';
 import { WorkerSyncProvider } from '@core/blackboard/worker-provider';
 import { getRootMap, getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
 import { YjsSyncProvider } from '@core/network/sync';
-import { initDatabase } from '@core/persistence/database';
+import { initDatabase, checkOpfsAvailable } from '@core/persistence/database';
 import { initEventLog, captureYDocUpdate } from '@core/persistence/event-log';
 import { initCheckpoints, loadLatestCheckpoint, startPeriodicCheckpoint } from '@core/persistence/checkpoint';
 import { createLogger } from '@utils/logging';
@@ -249,11 +249,7 @@ function mountUI(): void {
 }
 
 async function initPersistence(): Promise<void> {
-  const opfsAvailable = typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
-  if (!opfsAvailable) {
-    log.warn('OPFS not available — persistence and event log disabled');
-    return;
-  }
+  if (!checkOpfsAvailable()) return;
   try {
     await initDatabase();
     await initEventLog();
@@ -269,8 +265,7 @@ function startSessionCheckpoints(doc: Y.Doc): () => void {
 }
 
 async function loadSessionState(): Promise<Uint8Array | null> {
-  const opfsAvailable = typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
-  if (!opfsAvailable) return null;
+  if (!checkOpfsAvailable()) return null;
   try {
     await initDatabase();
     await initCheckpoints();
@@ -291,8 +286,7 @@ async function init(): Promise<void> {
   initMainSync();                     // doc.on('update') listener active NOW
   mountUI();
 
-  const opfsAvailable = typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
-  if (opfsAvailable) {
+  if (checkOpfsAvailable()) {
     await initPersistence();
     if (sharedDoc) {
       startSessionCheckpoints(sharedDoc);

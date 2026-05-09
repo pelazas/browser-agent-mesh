@@ -6,19 +6,22 @@ const log = createLogger('database');
 let db: Database | null = null;
 let opfsAvailable: boolean | null = null;
 
+export function checkOpfsAvailable(): boolean {
+  if (opfsAvailable !== null) return opfsAvailable;
+  opfsAvailable = typeof window !== 'undefined'
+    && window.crossOriginIsolated === true
+    && typeof navigator !== 'undefined'
+    && typeof navigator.storage?.getDirectory === 'function';
+  if (!opfsAvailable) {
+    log.warn('OPFS not available — persistence disabled', { crossOriginIsolated: typeof window !== 'undefined' ? window.crossOriginIsolated : 'N/A' });
+  }
+  return opfsAvailable;
+}
+
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
-
-  if (opfsAvailable === null) {
-    opfsAvailable = typeof navigator !== 'undefined'
-      && typeof navigator.storage?.getDirectory === 'function';
-    if (!opfsAvailable) {
-      log.warn('OPFS not available — persistence disabled');
-      return null as unknown as Database;
-    }
-  }
-  if (!opfsAvailable) {
-    return null as unknown as Database;
+  if (!checkOpfsAvailable()) {
+    throw new Error('OPFS not available — persistence disabled');
   }
 
   const sqlite3 = await import('@sqlite.org/sqlite-wasm');
