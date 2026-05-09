@@ -2,6 +2,11 @@ import * as Y from 'yjs';
 import { BaseAgent } from '../base';
 import { getActiveWorkflows } from '@core/blackboard/root-doc';
 import { acquireLock, releaseLock } from '@core/blackboard/lock';
+import {
+  completeTask as completeWorkflowTask,
+  failTask as failWorkflowTask,
+  markTaskRunning as markWorkflowTaskRunning,
+} from '@core/blackboard/task-state';
 import type { Edge, GPUProfile, TaskNode } from '@core/blackboard/schema';
 import { chat, getCurrentModel, getEngineStatus, loadModel, selectBestModel } from '@webllm/index';
 import { DAG } from '@core/graph/dag';
@@ -138,64 +143,17 @@ export class NodeWorkerAgent extends BaseAgent {
   }
 
   private markTaskRunning(workflowId: string, taskId: string): void {
-    const workflows = getActiveWorkflows(this.doc);
-    const workflow = workflows.get(workflowId);
-    if (!workflow) return;
-
-    this.doc.transact(() => {
-      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-      const node = dagMap.get(taskId);
-      if (!node) return;
-
-      node.set('status', 'running');
-      node.set('claimedBy', this.nodeId);
-      node.set('startedAt', Date.now());
-      workflow.set('updatedAt', Date.now());
-    });
+    markWorkflowTaskRunning(this.doc, workflowId, taskId, this.nodeId);
   }
 
   private completeTask(workflowId: string, taskId: string, result: unknown): void {
-    const workflows = getActiveWorkflows(this.doc);
-    const workflow = workflows.get(workflowId);
-    if (!workflow) return;
-
-    this.doc.transact(() => {
-      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-      const node = dagMap.get(taskId);
-      if (node) {
-        node.set('status', 'completed');
-        node.set('result', result);
-        node.set('error', null);
-        node.set('completedAt', Date.now());
-      }
-
-      const completedCount = (workflow.get('completedCount') as number) + 1;
-      workflow.set('completedCount', completedCount);
-      workflow.set('updatedAt', Date.now());
-    });
+    completeWorkflowTask(this.doc, workflowId, taskId, result);
 
     this.log.info('task completed', { taskId, workflowId });
   }
 
   private failTask(workflowId: string, taskId: string, error: string): void {
-    const workflows = getActiveWorkflows(this.doc);
-    const workflow = workflows.get(workflowId);
-    if (!workflow) return;
-
-    this.doc.transact(() => {
-      const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-      const node = dagMap.get(taskId);
-      if (node) {
-        node.set('status', 'failed');
-        node.set('error', error);
-        node.set('completedAt', Date.now());
-      }
-
-      const failedCount = (workflow.get('failedCount') as number) + 1;
-      workflow.set('failedCount', failedCount);
-      workflow.set('state', 'failed');
-      workflow.set('updatedAt', Date.now());
-    });
+    failWorkflowTask(this.doc, workflowId, taskId, error);
 
     this.log.warn('task failed', { taskId, workflowId, error });
   }
