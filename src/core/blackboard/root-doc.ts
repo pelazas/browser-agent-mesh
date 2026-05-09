@@ -1,4 +1,5 @@
 import * as Y from 'yjs';
+import { generateId } from '@/utils/id';
 
 export const ROOT_DOC_KEY = 'bam-blackboard';
 
@@ -11,6 +12,9 @@ export function createRootDoc(): Y.Doc {
   }
   if (!rootMap.has('nodes')) {
     rootMap.set('nodes', new Y.Map());
+  }
+  if (!rootMap.has('promptRequests')) {
+    rootMap.set('promptRequests', new Y.Map());
   }
   if (!rootMap.has('tools')) {
     rootMap.set('tools', new Y.Map());
@@ -35,6 +39,10 @@ export function getActiveWorkflows(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
 
 export function getNodes(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
   return getRootMap(doc).get('nodes') as Y.Map<Y.Map<unknown>>;
+}
+
+export function getPromptRequests(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
+  return getRootMap(doc).get('promptRequests') as Y.Map<Y.Map<unknown>>;
 }
 
 export function getTools(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
@@ -72,6 +80,26 @@ export function createWorkflow(doc: Y.Doc, workflowId: string, ownerNodeId: stri
 
   workflows.set(workflowId, workflow);
   return workflow;
+}
+
+export function createPromptRequest(doc: Y.Doc, prompt: string, requestedByNodeId: string): Y.Map<unknown> {
+  const requests = getPromptRequests(doc);
+  const requestId = generateId();
+  const now = Date.now();
+
+  const request = new Y.Map<unknown>();
+  request.set('id', requestId);
+  request.set('prompt', prompt);
+  request.set('status', 'pending');
+  request.set('createdAt', now);
+  request.set('updatedAt', now);
+  request.set('requestedByNodeId', requestedByNodeId);
+  request.set('claimedBy', null);
+  request.set('workflowId', null);
+  request.set('error', null);
+
+  requests.set(requestId, request);
+  return request;
 }
 
 export function registerNode(

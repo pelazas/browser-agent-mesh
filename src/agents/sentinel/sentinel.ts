@@ -1,8 +1,8 @@
 import { BaseAgent } from '../base';
 import { DAG } from '@core/graph/dag';
-import { createWorkflow } from '@core/blackboard/root-doc';
+import { createWorkflow, getPromptRequests } from '@core/blackboard/root-doc';
 import { generateId } from '@utils/id';
-import type { TaskNode } from '@core/blackboard/schema';
+import type { PromptRequestStatus, TaskNode } from '@core/blackboard/schema';
 import * as Y from 'yjs';
 
 interface ParsedTask {
@@ -20,10 +20,36 @@ export class SentinelAgent extends BaseAgent {
     this.log.info('sentinel running');
 
     while (this.running) {
-      // The sentinel subscribes to prompt inputs from the UI via blackboard observation
-      // This is triggered externally. In the loop, we poll for new prompts.
+      await this.processPendingPromptRequests();
       await this.sleep(2000);
     }
+  }
+
+  async processPendingPromptRequests(): Promise<number> {
+    const requests = getPromptRequests(this.doc);
+    let processedCount = 0;
+
+    for (const [, request] of requests) {
+      if (!this.claimPromptRequest(request)) continue;
+
+      const prompt = request.get('prompt');
+      if (typeof prompt !== 'string' || prompt.trim().length === 0) {
+        this.finishPromptRequest(request, 'failed', null, 'Prompt request is missing prompt text');
+        processedCount++;
+        continue;
+      }
+
+      try {
+        const workflowId = this.handlePrompt(prompt);
+        this.finishPromptRequest(request, 'processed', workflowId, null);
+      } catch (err) {
+        this.finishPromptRequest(request, 'failed', null, String(err));
+      }
+
+      processedCount++;
+    }
+
+    return processedCount;
   }
 
   handlePrompt(prompt: string): string {
@@ -68,6 +94,35 @@ export class SentinelAgent extends BaseAgent {
     this.log.info('dag created', { workflowId, taskCount, edgeCount: graph.edges.length });
 
     return workflowId;
+  }
+
+  private claimPromptRequest(request: Y.Map<unknown>): boolean {
+    let claimed = false;
+
+    this.doc.transact(() => {
+      if (request.get('status') !== 'pending') return;
+
+      request.set('status', 'claimed');
+      request.set('claimedBy', this.nodeId);
+      request.set('updatedAt', Date.now());
+      claimed = true;
+    });
+
+    return claimed;
+  }
+
+  private finishPromptRequest(
+    request: Y.Map<unknown>,
+    status: Extract<PromptRequestStatus, 'processed' | 'failed'>,
+    workflowId: string | null,
+    error: string | null,
+  ): void {
+    this.doc.transact(() => {
+      request.set('status', status);
+      request.set('workflowId', workflowId);
+      request.set('error', error);
+      request.set('updatedAt', Date.now());
+    });
   }
 
   private parsePromptToDAG(prompt: string): DAG {

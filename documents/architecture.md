@@ -19,7 +19,7 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 ## Agent Roles
 
 ### Sentinel (Router)
-- **Trigger:** User prompt from UI
+- **Trigger:** Pending prompt requests on the blackboard (`promptRequests`)
 - **Writes:** DAG of tasks into `activeWorkflows[workflowId].dag`
 - **Does not:** run LLMs or heavy compute
 - **File:** `src/agents/sentinel/sentinel.ts`
@@ -47,15 +47,16 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 ## Data Flow
 
 ```
-User prompt → UI → Blackboard.activeWorkflows[wid]
+User prompt → UI → Blackboard.promptRequests[requestId]
                         │
-         ┌──────────────┼──────────────┐
-         ▼              ▼              ▼
-     Sentinel      Node Workers    Bridge Agents
-     (builds       (claim +        (claim scrape
-      DAG)          execute LLM)    tasks)
-         │              │              │
-         └──────────────┼──────────────┘
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+      Sentinel      Node Workers    Bridge Agents
+      (claims       (claim +        (claim scrape
+       prompt,       execute LLM)    tasks)
+       builds DAG)
+          │              │              │
+          └──────────────┼──────────────┘
                         ▼
               All write results to Blackboard
                         │

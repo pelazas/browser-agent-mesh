@@ -10,6 +10,8 @@ export type EdgeType = 'sequential' | 'parallel' | 'conditional';
 
 export type WorkflowState = 'active' | 'paused' | 'completed' | 'failed';
 
+export type PromptRequestStatus = 'pending' | 'claimed' | 'processed' | 'failed';
+
 export interface GPUProfile {
   maxBufferSize: number;
   maxStorageBufferBindingSize: number;
@@ -67,6 +69,18 @@ export interface WorkflowEntry {
   failedCount: number;
 }
 
+export interface PromptRequestEntry {
+  id: string;
+  prompt: string;
+  status: PromptRequestStatus;
+  createdAt: number;
+  updatedAt: number;
+  requestedByNodeId: string;
+  claimedBy: string | null;
+  workflowId: string | null;
+  error: string | null;
+}
+
 export interface ToolDescriptor {
   id: string;
   name: string;
@@ -98,6 +112,7 @@ export interface LockEntry {
 
 export interface RootDocTypes {
   activeWorkflows: Y.Map<Y.Map<unknown>>;
+  promptRequests: Y.Map<Y.Map<unknown>>;
   nodes: Y.Map<Y.Map<unknown>>;
   tools: Y.Map<Y.Map<unknown>>;
   telemetry: Y.Map<Y.Map<unknown>>;

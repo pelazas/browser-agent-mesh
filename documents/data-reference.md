@@ -22,6 +22,18 @@ bam-blackboard: Y.Map
   │           ├── edges: Y.Array<Edge>
   │           └── locks: Y.Map<string, LockEntry>
   │
+  ├── promptRequests: Y.Map<string, PromptRequest>
+  │     └── {requestId}: Y.Map
+  │           ├── id: string
+  │           ├── prompt: string
+  │           ├── status: "pending" | "claimed" | "processed" | "failed"
+  │           ├── createdAt: number (ms)
+  │           ├── updatedAt: number (ms)
+  │           ├── requestedByNodeId: string
+  │           ├── claimedBy: string | null
+  │           ├── workflowId: string | null
+  │           └── error: string | null
+  │
   ├── nodes: Y.Map<string, NodeEntry>
   │     └── {nodeId}: Y.Map
   │           ├── id: string
@@ -133,6 +145,21 @@ interface WorkflowEntry {
   taskCount: number;
   completedCount: number;
   failedCount: number;
+}
+```
+
+### PromptRequestEntry
+```ts
+interface PromptRequestEntry {
+  id: string;
+  prompt: string;
+  status: 'pending' | 'claimed' | 'processed' | 'failed';
+  createdAt: number;
+  updatedAt: number;
+  requestedByNodeId: string;
+  claimedBy: string | null;
+  workflowId: string | null;
+  error: string | null;
 }
 ```
 
