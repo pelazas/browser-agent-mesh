@@ -44,9 +44,17 @@ export class NodeWorkerAgent extends BaseAgent {
     const workflows = getActiveWorkflows(this.doc);
     if (!workflows) return;
 
+    const hasWorkflows = workflows.size > 0;
+    if (hasWorkflows) {
+      this.log.info('poll cycle', { workflowCount: workflows.size });
+    }
+
     for (const [workflowId] of workflows) {
       const workflow = workflows.get(workflowId);
       if (!workflow) continue;
+
+      const state = workflow.get('state');
+      if (state !== 'active') continue;
 
       const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
       if (!dagMap) continue;
@@ -60,6 +68,8 @@ export class NodeWorkerAgent extends BaseAgent {
           ...(nodeEntry.toJSON() as unknown as Omit<TaskNode, 'id'>),
         });
       }
+
+      if (nodesArray.length === 0) continue;
 
       const dag = DAG.fromJSON({
         nodes: nodesArray,
