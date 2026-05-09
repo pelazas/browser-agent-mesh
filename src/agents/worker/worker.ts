@@ -65,7 +65,7 @@ export class NodeWorkerAgent extends BaseAgent {
 
       const dag = DAG.fromJSON({
         nodes: nodesArray,
-        edges: edges.toJSON() as TaskNode['edges' as keyof TaskNode] as unknown as { id: string; source: string; target: string; type: string }[],
+        edges: edges.toJSON() as unknown as { id: string; source: string; target: string; type: string }[],
       });
 
       const readyTasks = dag.getReadyTasks();
