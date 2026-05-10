@@ -1,4 +1,5 @@
 import { BaseAgent } from '../base';
+import { getKeywordPattern } from '@agents/keywords';
 import { DAG } from '@core/graph/dag';
 import { createWorkflow, getPromptRequests } from '@core/blackboard/root-doc';
 import { generateId } from '@utils/id';
@@ -176,12 +177,14 @@ export class SentinelAgent extends BaseAgent {
 
   private decomposePrompt(prompt: string): ParsedTask[] {
     const lower = prompt.toLowerCase();
+    const pattern = getKeywordPattern();
+    const matches = lower.match(pattern) ?? [];
 
     // Simple heuristic decomposition
     // In production, the Sentinel would use an LLM for this step
     const tasks: ParsedTask[] = [];
 
-    if (lower.includes('research') || lower.includes('find') || lower.includes('search')) {
+    if (matches.some((m) => ['research', 'find', 'search'].includes(m))) {
       tasks.push({
         description: 'Search and retrieve information about: ' + prompt,
         type: 'retrieve',
@@ -199,7 +202,7 @@ export class SentinelAgent extends BaseAgent {
         type: 'reduce',
         dependencies: [1],
       });
-    } else if (lower.includes('scrape') || lower.includes('extract')) {
+    } else if (matches.some((m) => ['scrape', 'extract'].includes(m))) {
       const scrapeArgs: Record<string, unknown> = { prompt };
       const url = this.extractUrlFromText(prompt);
       if (url) {
@@ -223,7 +226,7 @@ export class SentinelAgent extends BaseAgent {
         type: 'reduce',
         dependencies: [0],
       });
-    } else if (lower.includes('summarize') || lower.includes('summarise')) {
+    } else if (matches.some((m) => ['summarize', 'summarise'].includes(m))) {
       tasks.push({
         description: 'Read and chunk input text',
         type: 'retrieve',
