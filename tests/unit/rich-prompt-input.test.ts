@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSegments } from '@ui/components/KeywordText';
+import { parseSegments } from '@ui/components/useKeywordText';
 
 describe('parseSegments', () => {
   it('returns single text segment for text with no keywords', () => {

@@ -410,6 +410,21 @@ body {
   line-height: 1.4;
 }
 
+.workflow-keyword {
+  color: #f29ca3;
+  font-weight: 700;
+}
+
+.workflow-link {
+  color: #8ecbff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.workflow-link:hover {
+  color: #b1dbff;
+}
+
 .workflow-view__progress {
   display: flex;
   align-items: center;

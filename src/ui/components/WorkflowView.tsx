@@ -34,7 +34,7 @@ export const WorkflowView: React.FC<WorkflowViewProps> = (props) => {
         <span className="workflow-view__state">{statusText}</span>
       </div>
       <div className="workflow-view__prompt">
-        <KeywordText text={prompt} />
+        <KeywordText text={prompt} variant="workflow" />
       </div>
       <div className="workflow-view__progress">
         <div className="workflow-view__bar">
