@@ -66,7 +66,7 @@ User prompt → UI → Blackboard.promptRequests[requestId]
                   (consolidate + HITL)
                         │
                         ▼
-                    Final output on Blackboard → UI
+                    Final output on Blackboard → UI workflow cards
 ```
 
 ---
@@ -102,3 +102,4 @@ User prompt → UI → Blackboard.promptRequests[requestId]
 - **Event Sourcing:** Every CRDT mutation is appended to an immutable append-only log in OPFS SQLite.
 - **Telemetry:** Agents broadcast VRAM usage, token generation speed, and peer count via Gossipsub. UI renders real-time mesh health.
 - **Persistence:** SQLite WASM in OPFS stores the event log and periodic Y.Doc checkpoints. On tab reload, agents re-sync with the mesh and resume execution.
+- **UI Observability:** The React UI observes both `promptRequests` and `activeWorkflows` so users can see queued/routing activity before a workflow exists, then live workflow progress and final outputs once tasks start completing.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as Y from 'yjs';
-import { getNodes, getActiveWorkflows, getTelemetry } from '@core/blackboard/root-doc';
+import { getNodes, getActiveWorkflows, getPromptRequests, getTelemetry } from '@core/blackboard/root-doc';
 import { useBlackboardContext } from '@ui/context/BlackboardContext';
 import { createLogger } from '@utils/logging';
 
@@ -32,6 +32,7 @@ interface UseBlackboardReturn {
   doc: Y.Doc | null;
   nodes: Map<string, unknown>;
   workflows: Map<string, unknown>;
+  promptRequests: Map<string, unknown>;
   telemetry: Map<string, unknown>;
   observe: (path: string) => void;
 }
@@ -41,6 +42,7 @@ export function useBlackboard(): UseBlackboardReturn {
 
   const [nodes, setNodes] = useState<Map<string, unknown>>(new Map());
   const [workflows, setWorkflows] = useState<Map<string, unknown>>(new Map());
+  const [promptRequests, setPromptRequests] = useState<Map<string, unknown>>(new Map());
   const [telemetry, setTelemetry] = useState<Map<string, unknown>>(new Map());
 
   useEffect(() => {
@@ -84,6 +86,21 @@ export function useBlackboard(): UseBlackboardReturn {
     }
     refreshWorkflows();
 
+    const promptRequestsMap = getPromptRequests(doc);
+    const refreshPromptRequests = () => {
+      const requestsMap = getPromptRequests(doc);
+      if (!requestsMap) return;
+      const data = new Map<string, unknown>();
+      for (const [key] of requestsMap) {
+        data.set(key, requestsMap.get(key)?.toJSON());
+      }
+      setPromptRequests((prev) => (shallowEqualMaps(prev, data) ? prev : data));
+    };
+    if (promptRequestsMap) {
+      promptRequestsMap.observe(refreshPromptRequests);
+    }
+    refreshPromptRequests();
+
     const telemetryMap = getTelemetry(doc);
     const refreshTelemetry = () => {
       const tMap = getTelemetry(doc);
@@ -106,10 +123,23 @@ export function useBlackboard(): UseBlackboardReturn {
     const interval = setInterval(() => {
       refreshNodes();
       refreshWorkflows();
+      refreshPromptRequests();
       refreshTelemetry();
     }, 2000);
 
     return () => {
+      if (nodesMap) {
+        nodesMap.unobserve(refreshNodes);
+      }
+      if (workflowsMap) {
+        workflowsMap.unobserve(refreshWorkflows);
+      }
+      if (promptRequestsMap) {
+        promptRequestsMap.unobserve(refreshPromptRequests);
+      }
+      if (telemetryMap) {
+        telemetryMap.unobserve(refreshTelemetry);
+      }
       clearInterval(interval);
     };
   }, [doc]);
@@ -118,5 +148,5 @@ export function useBlackboard(): UseBlackboardReturn {
     // Path-based observation would be set up here
   }, [doc]);
 
-  return { doc, nodes, workflows, telemetry, observe };
+  return { doc, nodes, workflows, promptRequests, telemetry, observe };
 }

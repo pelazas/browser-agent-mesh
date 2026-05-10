@@ -177,6 +177,21 @@ interface WorkflowResult {
 
 Synthesizer workers reduce all completed task results in deterministic DAG order, persist the final `WorkflowResult` onto the workflow, and then mark the workflow `completed`. If a workflow is otherwise ready but has no usable completed task results, the synthesizer marks the workflow `failed` with an error.
 
+Common fragment payload written by node workers for LLM tasks:
+
+```ts
+interface LlmResultFragment {
+  type: 'llm_result';
+  prompt: string;
+  output: string;
+  modelId: string | null;
+  tokensGenerated: number;
+  tokensPerSec: number;
+}
+```
+
+The UI should prefer `WorkflowResult.fragments[*].content.output` and `modelId` when rendering the final answer card, falling back to `WorkflowResult.content` only when no LLM fragment is available.
+
 ### PromptRequestEntry
 ```ts
 interface PromptRequestEntry {

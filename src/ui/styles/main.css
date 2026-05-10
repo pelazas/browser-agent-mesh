@@ -189,9 +189,40 @@ body {
   background: var(--accent-hover);
 }
 
+.prompt-input__submit--active {
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35), 0 0 16px rgba(99, 102, 241, 0.2);
+}
+
 .prompt-input__submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.prompt-input__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.prompt-input__status--active {
+  color: var(--accent-hover);
+}
+
+.prompt-input__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: prompt-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes prompt-pulse {
+  0% { transform: scale(0.95); opacity: 0.65; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.65; }
 }
 
 /* AgentCard */
@@ -359,6 +390,41 @@ body {
   font-size: 0.75rem;
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+.workflow-view__meta {
+  margin-top: 12px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.workflow-view__response,
+.workflow-view__placeholder,
+.workflow-view__error {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.workflow-view__response {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  white-space: pre-wrap;
+}
+
+.workflow-view__placeholder {
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+}
+
+.workflow-view__error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  color: #fca5a5;
 }
 
 /* Blackboard Debugger */

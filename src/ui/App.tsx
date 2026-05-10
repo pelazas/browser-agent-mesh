@@ -1,94 +1,25 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { MeshGraph } from '@ui/components/MeshGraph';
 import { PromptInput } from '@ui/components/PromptInput';
 import { TelemetryPanel } from '@ui/components/TelemetryPanel';
 import { WorkflowView } from '@ui/components/WorkflowView';
 import { BlackboardDebugger } from '@ui/components/BlackboardDebugger';
 import { useBlackboard } from '@ui/hooks/useBlackboard';
+import { useAppView } from '@ui/hooks/useAppView';
 import { useNetworkHealth } from '@ui/hooks/useMesh';
 import { usePromptSubmit } from '@ui/hooks/usePromptSubmit';
 import '@ui/styles/main.css';
 
-interface MeshNodeUI {
-  id: string;
-  role: string;
-  status: string;
-  gpu?: string;
-  tasks?: number;
-}
-
-interface MetricsEntryUI {
-  nodeId: string;
-  cpuUsage: number;
-  vramUsedMB: number;
-  tokensPerSec: number | null;
-  peerCount: number;
-  timestamp: number;
-}
-
-interface WorkflowUI {
-  workflowId: string;
-  prompt: string;
-  state: string;
-  taskCount: number;
-  completedCount: number;
-  failedCount: number;
-}
-
 export const App: React.FC = () => {
-  const { nodes, workflows, telemetry } = useBlackboard();
+  const { nodes, workflows, promptRequests, telemetry } = useBlackboard();
   const networkHealth = useNetworkHealth();
   const { onSubmit } = usePromptSubmit();
-
-  const meshNodes: MeshNodeUI[] = useMemo(() => {
-    const result: MeshNodeUI[] = [];
-    nodes.forEach((val: unknown, key: string) => {
-      const data = val as Record<string, unknown>;
-      if (!data) return;
-      result.push({
-        id: key,
-        role: (data.role as string) ?? 'unknown',
-        status: (data.status as string) ?? 'offline',
-        gpu: data.gpu ? `${(data.gpu as Record<string, number>)?.vramEstimateMB}MB` : undefined,
-        tasks: Array.isArray(data.tasks) ? (data.tasks as unknown[]).length : undefined,
-      });
-    });
-    return result;
-  }, [nodes]);
-
-  const telemetryMetrics: MetricsEntryUI[] = useMemo(() => {
-    const result: MetricsEntryUI[] = [];
-    telemetry.forEach((val: unknown, key: string) => {
-      const data = val as Record<string, unknown>;
-      if (!data) return;
-      result.push({
-        nodeId: key,
-        cpuUsage: (data.cpuUsage as number) ?? 0,
-        vramUsedMB: (data.vramUsedMB as number) ?? 0,
-        tokensPerSec: (data.tokensPerSec as number | null) ?? null,
-        peerCount: (data.peerCount as number) ?? 0,
-        timestamp: (data.timestamp as number) ?? Date.now(),
-      });
-    });
-    return result;
-  }, [telemetry]);
-
-  const workflowList: WorkflowUI[] = useMemo(() => {
-    const result: WorkflowUI[] = [];
-    workflows.forEach((val: unknown, key: string) => {
-      const data = val as Record<string, unknown>;
-      if (!data) return;
-      result.push({
-        workflowId: key,
-        prompt: (data.prompt as string) ?? '',
-        state: (data.state as string) ?? 'active',
-        taskCount: (data.taskCount as number) ?? 0,
-        completedCount: (data.completedCount as number) ?? 0,
-        failedCount: (data.failedCount as number) ?? 0,
-      });
-    });
-    return result;
-  }, [workflows]);
+  const { meshNodes, telemetryMetrics, workflowList, promptStatus } = useAppView({
+    nodes,
+    workflows,
+    promptRequests,
+    telemetry,
+  });
 
   return (
     <div className="app">
@@ -117,7 +48,12 @@ export const App: React.FC = () => {
 
       <div className="app__grid">
         <div className="app__main">
-          <PromptInput onSubmit={onSubmit} disabled={false} />
+          <PromptInput
+            onSubmit={onSubmit}
+            disabled={false}
+            active={promptStatus.active}
+            statusMessage={promptStatus.message}
+          />
 
           <div style={{ marginTop: 24 }}>
             {workflowList.map((w) => (

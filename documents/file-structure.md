@@ -93,12 +93,15 @@ browser-agent-mesh/
 │   │   ├── components/
 │   │   │   ├── MeshGraph.tsx             # Node topology visualization grid
 │   │   │   ├── PromptInput.tsx           # User prompt submission form
+│   │   │   ├── usePromptInput.ts         # Prompt input state + submit handlers
 │   │   │   ├── AgentCard.tsx             # Single agent status card (role, GPU, tasks)
 │   │   │   ├── TelemetryPanel.tsx        # Real-time metrics list
 │   │   │   ├── WorkflowView.tsx          # DAG progress bar + task counts
+│   │   │   ├── useWorkflowView.ts        # Workflow card derived state (progress, response)
 │   │   │   └── BlackboardDebugger.tsx    # Live CRDT state JSON tree viewer
 │   │   ├── hooks/
 │   │   │   ├── useBlackboard.ts          # Y.Doc → reactive React state (nodes, workflows, telemetry)
+│   │   │   ├── useAppView.ts             # App-level view models for workflows and prompt status
 │   │   │   └── useMesh.ts               # Network health (peer count, connection status)
 │   │   └── styles/
 │   │       └── main.css                  # Full application stylesheet (dark theme)
