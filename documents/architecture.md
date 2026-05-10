@@ -33,7 +33,7 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 ### Bridge (MCP Tool Agent)
 - **Trigger:** DAG-ready `scrape` tasks on the Blackboard
 - **Claims** tasks via CRDT lock to prevent duplicate execution
-- **Does:** Web scraping (subject to standard browser CORS; cross-origin requests require a cooperating origin or CORS proxy), writes structured scrape results back to the DAG task node, OPFS read/write, format+stream data
+- **Does:** Web scraping. It attempts direct browser `fetch()` first, then retries through the optional `VITE_CORS_PROXY_URL` proxy when the browser throws a cross-origin `TypeError`. Writes structured scrape results back to the DAG task node, OPFS read/write, format+stream data
 - **Does not:** run LLMs
 - **File:** `src/agents/bridge/bridge.ts`
 
@@ -103,3 +103,4 @@ User prompt → UI → Blackboard.promptRequests[requestId]
 - **Telemetry:** Agents broadcast VRAM usage, token generation speed, and peer count via Gossipsub. UI renders real-time mesh health.
 - **Persistence:** SQLite WASM in OPFS stores the event log and periodic Y.Doc checkpoints. On tab reload, agents re-sync with the mesh and resume execution.
 - **UI Observability:** The React UI observes both `promptRequests` and `activeWorkflows` so users can see queued/routing activity before a workflow exists, then live workflow progress and final outputs once tasks start completing.
+- **Scraper Proxy Config:** Set `VITE_CORS_PROXY_URL` to a proxy base URL that accepts `?url=<encoded-target-url>` when cross-origin targets do not emit CORS headers.

@@ -3,6 +3,7 @@ export const config = {
   stunServers: (
     import.meta.env.VITE_STUN_SERVERS ?? 'stun:stun.l.google.com:19302'
   ).split(','),
+  corsProxyUrl: import.meta.env.VITE_CORS_PROXY_URL?.trim() || undefined,
   modelCachePath: import.meta.env.VITE_MODEL_CACHE_PATH ?? '/models',
   maxVramMB: parseInt(import.meta.env.VITE_MAX_VRAM_MB ?? '0', 10),
   debug: import.meta.env.VITE_DEBUG === 'true',

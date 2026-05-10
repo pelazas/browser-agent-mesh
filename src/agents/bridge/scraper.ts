@@ -1,4 +1,5 @@
 import { createLogger } from '@utils/logging';
+import { config } from '@/config';
 
 const log = createLogger('scraper');
 
@@ -14,18 +15,50 @@ function isSupportedContentType(contentType: string): boolean {
   return SUPPORTED_CONTENT_TYPES.some((t) => contentType.startsWith(t));
 }
 
+function buildProxyUrl(targetUrl: string): string {
+  return `${config.corsProxyUrl}?url=${encodeURIComponent(targetUrl)}`;
+}
+
+async function fetchWithCorsProxyFallback(url: string, options: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (!(err instanceof TypeError)) {
+      throw err;
+    }
+
+    if (!config.corsProxyUrl) {
+      throw new Error(
+        `Cross-origin request blocked for ${url}. `
+        + 'Set VITE_CORS_PROXY_URL in your environment to route requests through a proxy.',
+      );
+    }
+
+    const proxyUrl = buildProxyUrl(url);
+
+    try {
+      return await fetch(proxyUrl, options);
+    } catch (proxyErr) {
+      const directMessage = err.message || 'TypeError';
+      const proxyMessage = proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
+      throw new Error(
+        `Direct fetch failed for ${url}: ${directMessage}. `
+        + `Proxy retry failed via ${proxyUrl}: ${proxyMessage}`,
+      );
+    }
+  }
+}
+
 export async function scrape(opts: ScrapeOptions): Promise<string> {
   log.info('scraping', { url: opts.url, selector: opts.selector ?? null });
 
   let response: Response;
   try {
-    response = await fetch(opts.url, {
+    response = await fetchWithCorsProxyFallback(opts.url, {
       signal: AbortSignal.timeout(opts.timeout ?? 10_000),
     });
   } catch (err) {
-    const message = err instanceof TypeError
-      ? `Cross-origin request blocked by CORS or network failure for ${opts.url}. The target server did not allow access.`
-      : String(err);
+    const message = err instanceof Error ? err.message : String(err);
     log.error('scrape fetch failed', { url: opts.url, error: message });
     throw new Error(message);
   }
