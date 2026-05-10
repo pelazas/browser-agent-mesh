@@ -1,20 +1,18 @@
 import React from 'react';
 import { MeshGraph } from '@ui/components/MeshGraph';
-import { PromptInput } from '@ui/components/PromptInput';
+import { RichPromptInput } from '@ui/components/RichPromptInput';
 import { TelemetryPanel } from '@ui/components/TelemetryPanel';
 import { WorkflowView } from '@ui/components/WorkflowView';
 import { BlackboardDebugger } from '@ui/components/BlackboardDebugger';
 import { useBlackboard } from '@ui/hooks/useBlackboard';
 import { useAppView } from '@ui/hooks/useAppView';
 import { useNetworkHealth } from '@ui/hooks/useMesh';
-import { usePromptSubmit } from '@ui/hooks/usePromptSubmit';
 import '@ui/styles/main.css';
 
 export const App: React.FC = () => {
   const { nodes, workflows, promptRequests, telemetry } = useBlackboard();
   const networkHealth = useNetworkHealth();
-  const { onSubmit } = usePromptSubmit();
-  const { meshNodes, telemetryMetrics, workflowList, promptStatus } = useAppView({
+  const { meshNodes, telemetryMetrics, workflowList } = useAppView({
     nodes,
     workflows,
     promptRequests,
@@ -48,12 +46,7 @@ export const App: React.FC = () => {
 
       <div className="app__grid">
         <div className="app__main">
-          <PromptInput
-            onSubmit={onSubmit}
-            disabled={false}
-            active={promptStatus.active}
-            statusMessage={promptStatus.message}
-          />
+          <RichPromptInput disabled={false} />
 
           <div style={{ marginTop: 24 }}>
             {workflowList.map((w) => (
