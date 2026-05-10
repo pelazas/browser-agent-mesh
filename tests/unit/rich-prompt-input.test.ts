@@ -1,74 +1,141 @@
 import { describe, expect, it } from 'vitest';
-import { highlightKeywords } from '@ui/components/useRichPromptInput';
+import { parseSegments } from '@ui/components/KeywordText';
 
-function rainbowKeyword(word: string): string {
-  const chars = Array.from(word)
-    .map((char, i) => `<span class="rainbow-char" style="--char-index:${i}">${char}</span>`)
-    .join('');
-  return `<span class="rainbow-keyword">${chars}</span>`;
-}
-
-describe('highlightKeywords', () => {
-  it('returns empty string for empty input', () => {
-    expect(highlightKeywords('')).toBe('');
+describe('parseSegments', () => {
+  it('returns single text segment for text with no keywords', () => {
+    expect(parseSegments('hello world')).toEqual([
+      { type: 'text', content: 'hello world', key: 'txt-0' },
+    ]);
   });
 
-  it('escapes HTML entities', () => {
-    expect(highlightKeywords('<script>')).toBe('&lt;script&gt;');
-    expect(highlightKeywords('a & b')).toBe('a &amp; b');
+  it('escapes nothing (segments are raw text)', () => {
+    expect(parseSegments('<script>')).toEqual([
+      { type: 'text', content: '<script>', key: 'txt-0' },
+    ]);
   });
 
   it('wraps a single keyword', () => {
-    expect(highlightKeywords('research this')).toBe(
-      `${rainbowKeyword('research')} this`,
-    );
+    const segments = parseSegments('research this');
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toEqual({
+      type: 'keyword',
+      content: 'research',
+      key: 'kw-research-0',
+    });
+    expect(segments[1]).toEqual({
+      type: 'text',
+      content: ' this',
+      key: 'txt-8',
+    });
   });
 
   it('wraps multiple keywords', () => {
-    expect(highlightKeywords('research and scrape')).toBe(
-      `${rainbowKeyword('research')} and ${rainbowKeyword('scrape')}`,
-    );
+    const segments = parseSegments('research and scrape');
+    expect(segments).toHaveLength(3);
+    expect(segments[0]).toEqual({
+      type: 'keyword',
+      content: 'research',
+      key: 'kw-research-0',
+    });
+    expect(segments[1]).toEqual({
+      type: 'text',
+      content: ' and ',
+      key: 'txt-8',
+    });
+    expect(segments[2]).toEqual({
+      type: 'keyword',
+      content: 'scrape',
+      key: 'kw-scrape-0',
+    });
   });
 
   it('is case insensitive', () => {
-    expect(highlightKeywords('ScRaPe')).toBe(rainbowKeyword('ScRaPe'));
+    const segments = parseSegments('ScRaPe');
+    expect(segments[0]).toEqual({
+      type: 'keyword',
+      content: 'ScRaPe',
+      key: 'kw-scrape-0',
+    });
   });
 
   it('does not match partial words', () => {
-    expect(highlightKeywords('researching')).toBe('researching');
-    expect(highlightKeywords('my findings')).toBe('my findings');
+    expect(parseSegments('researching')).toEqual([
+      { type: 'text', content: 'researching', key: 'txt-0' },
+    ]);
+    expect(parseSegments('my findings')).toEqual([
+      { type: 'text', content: 'my findings', key: 'txt-0' },
+    ]);
   });
 
   it('matches british spelling summarise', () => {
-    expect(highlightKeywords('summarise this')).toBe(
-      `${rainbowKeyword('summarise')} this`,
-    );
+    const segments = parseSegments('summarise this');
+    expect(segments[0]).toEqual({
+      type: 'keyword',
+      content: 'summarise',
+      key: 'kw-summarise-0',
+    });
   });
 
   it('matches find and search', () => {
-    expect(highlightKeywords('find the answer')).toBe(
-      `${rainbowKeyword('find')} the answer`,
-    );
-    expect(highlightKeywords('search for it')).toBe(
-      `${rainbowKeyword('search')} for it`,
-    );
+    expect(parseSegments('find the answer')[0]).toEqual({
+      type: 'keyword',
+      content: 'find',
+      key: 'kw-find-0',
+    });
+    expect(parseSegments('search for it')[0]).toEqual({
+      type: 'keyword',
+      content: 'search',
+      key: 'kw-search-0',
+    });
   });
 
   it('matches extract', () => {
-    expect(highlightKeywords('extract data')).toBe(
-      `${rainbowKeyword('extract')} data`,
-    );
+    expect(parseSegments('extract data')[0]).toEqual({
+      type: 'keyword',
+      content: 'extract',
+      key: 'kw-extract-0',
+    });
   });
 
   it('matches summarize', () => {
-    expect(highlightKeywords('summarize report')).toBe(
-      `${rainbowKeyword('summarize')} report`,
-    );
+    expect(parseSegments('summarize report')[0]).toEqual({
+      type: 'keyword',
+      content: 'summarize',
+      key: 'kw-summarize-0',
+    });
+  });
+
+  it('counts occurrences per keyword', () => {
+    const segments = parseSegments('research and research');
+    expect(segments[0]).toEqual({
+      type: 'keyword',
+      content: 'research',
+      key: 'kw-research-0',
+    });
+    expect(segments[2]).toEqual({
+      type: 'keyword',
+      content: 'research',
+      key: 'kw-research-1',
+    });
   });
 
   it('preserves newlines', () => {
-    expect(highlightKeywords('research\nscrape')).toBe(
-      `${rainbowKeyword('research')}\n${rainbowKeyword('scrape')}`,
-    );
+    const segments = parseSegments('research\nscrape');
+    expect(segments).toHaveLength(3);
+    expect(segments[0]).toEqual({
+      type: 'keyword',
+      content: 'research',
+      key: 'kw-research-0',
+    });
+    expect(segments[1]).toEqual({
+      type: 'text',
+      content: '\n',
+      key: 'txt-8',
+    });
+    expect(segments[2]).toEqual({
+      type: 'keyword',
+      content: 'scrape',
+      key: 'kw-scrape-0',
+    });
   });
 });

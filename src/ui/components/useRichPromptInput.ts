@@ -1,33 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPromptRequest } from '@core/blackboard/root-doc';
 import { useBlackboardContext } from '@ui/context/BlackboardContext';
-import { getKeywordPattern } from '@agents/keywords';
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function wrapKeywordChars(keyword: string): string {
-  const chars = Array.from(keyword);
-  const wrapped = chars
-    .map((char, i) => `<span class="rainbow-char" style="--char-index:${i}">${char}</span>`)
-    .join('');
-  return `<span class="rainbow-keyword">${wrapped}</span>`;
-}
-
-export function highlightKeywords(text: string): string {
-  if (!text) return '';
-  const pattern = getKeywordPattern();
-  const escaped = escapeHtml(text);
-  return escaped.replace(pattern, (match) => wrapKeywordChars(match));
-}
 
 export interface UseRichPromptInputResult {
   value: string;
-  highlightedHtml: string;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   overlayRef: React.RefObject<HTMLDivElement>;
   handleChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -41,8 +17,6 @@ export function useRichPromptInput(disabled?: boolean): UseRichPromptInputResult
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const requesterNodeIdRef = useRef('ui-main-thread');
-
-  const highlightedHtml = highlightKeywords(value);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -80,7 +54,6 @@ export function useRichPromptInput(disabled?: boolean): UseRichPromptInputResult
 
   return {
     value,
-    highlightedHtml,
     textareaRef,
     overlayRef,
     handleChange,

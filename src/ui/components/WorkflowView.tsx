@@ -1,5 +1,5 @@
 import React from 'react';
-import { highlightKeywords } from '@ui/components/useRichPromptInput';
+import { KeywordText } from '@ui/components/KeywordText';
 import { useWorkflowView } from '@ui/components/useWorkflowView';
 
 interface WorkflowViewProps {
@@ -33,10 +33,9 @@ export const WorkflowView: React.FC<WorkflowViewProps> = (props) => {
         <span className="workflow-view__id">{workflowId.slice(0, 8)}</span>
         <span className="workflow-view__state">{statusText}</span>
       </div>
-      <div
-        className="workflow-view__prompt"
-        dangerouslySetInnerHTML={{ __html: highlightKeywords(prompt) }}
-      />
+      <div className="workflow-view__prompt">
+        <KeywordText text={prompt} />
+      </div>
       <div className="workflow-view__progress">
         <div className="workflow-view__bar">
           <div

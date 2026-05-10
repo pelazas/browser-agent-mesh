@@ -1,4 +1,5 @@
 import React from 'react';
+import { KeywordText } from './KeywordText';
 import { useRichPromptInput } from './useRichPromptInput';
 
 interface RichPromptInputProps {
@@ -8,7 +9,6 @@ interface RichPromptInputProps {
 export const RichPromptInput: React.FC<RichPromptInputProps> = ({ disabled }) => {
   const {
     value,
-    highlightedHtml,
     textareaRef,
     overlayRef,
     handleChange,
@@ -23,8 +23,9 @@ export const RichPromptInput: React.FC<RichPromptInputProps> = ({ disabled }) =>
           ref={overlayRef}
           className="rich-prompt-input__overlay"
           aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-        />
+        >
+          <KeywordText text={value} />
+        </div>
         <textarea
           ref={textareaRef}
           className="rich-prompt-input__textarea"
