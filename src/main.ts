@@ -248,15 +248,17 @@ function mountUI(): void {
   log.info('UI mounted', { hasDoc: !!sharedDoc });
 }
 
-async function initPersistence(): Promise<void> {
-  if (!checkOpfsAvailable()) return;
+async function initPersistence(): Promise<boolean> {
+  if (!checkOpfsAvailable()) return false;
   try {
     await initDatabase();
     await initEventLog();
     await initCheckpoints();
     log.info('persistence layer initialized');
+    return true;
   } catch (err) {
     log.warn('persistence init failed (non-blocking)', { error: String(err) });
+    return false;
   }
 }
 
@@ -286,14 +288,12 @@ async function init(): Promise<void> {
   initMainSync();                     // doc.on('update') listener active NOW
   mountUI();
 
-  if (checkOpfsAvailable()) {
-    await initPersistence();
-    if (sharedDoc) {
-      startSessionCheckpoints(sharedDoc);
-      captureYDocUpdate(sharedDoc, 'ui-main-thread', null);
-    }
+  const persistenceReady = await initPersistence();
+  if (persistenceReady && sharedDoc) {
+    startSessionCheckpoints(sharedDoc);
+    captureYDocUpdate(sharedDoc, 'ui-main-thread', null);
   } else {
-    log.warn('OPFS not available — persistence, checkpoints, and event log disabled');
+    log.info('persistence, checkpoints, and event log disabled');
   }
 
   setTimeout(() => {

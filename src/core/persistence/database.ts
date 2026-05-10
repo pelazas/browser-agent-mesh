@@ -8,12 +8,19 @@ let opfsAvailable: boolean | null = null;
 
 export function checkOpfsAvailable(): boolean {
   if (opfsAvailable !== null) return opfsAvailable;
+  const hasSyncAccessHandle = typeof FileSystemFileHandle !== 'undefined'
+    && typeof (FileSystemFileHandle.prototype as unknown as Record<string, unknown>).createSyncAccessHandle === 'function';
   opfsAvailable = typeof window !== 'undefined'
     && window.crossOriginIsolated === true
     && typeof navigator !== 'undefined'
-    && typeof navigator.storage?.getDirectory === 'function';
+    && typeof navigator.storage?.getDirectory === 'function'
+    && hasSyncAccessHandle;
   if (!opfsAvailable) {
-    log.warn('OPFS not available — persistence disabled', { crossOriginIsolated: typeof window !== 'undefined' ? window.crossOriginIsolated : 'N/A' });
+    log.warn('OPFS not available — persistence disabled', {
+      crossOriginIsolated: typeof window !== 'undefined' ? window.crossOriginIsolated : 'N/A',
+      hasGetDirectory: typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function',
+      hasSyncAccessHandle,
+    });
   }
   return opfsAvailable;
 }
