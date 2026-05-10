@@ -214,8 +214,8 @@ body {
 }
 
 .rainbow-char {
-  animation: rainbow-cycle 0.7s steps(7) infinite;
-  animation-delay: calc(var(--char-index) * -0.1s);
+  animation: rainbow-cycle 1.05s steps(7) infinite;
+  animation-delay: calc(var(--char-index) * -0.15s);
 }
 
 .prompt-input__submit {
