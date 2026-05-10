@@ -7,10 +7,22 @@ test('app loads and renders the UI', async ({ page }) => {
 
 test('prompt input is visible and functional', async ({ page }) => {
   await page.goto('/');
-  const textarea = page.locator('.prompt-input__textarea');
+  const textarea = page.locator('.rich-prompt-input__textarea');
   await expect(textarea).toBeVisible();
   await textarea.fill('test prompt');
   await expect(textarea).toHaveValue('test prompt');
+});
+
+test('prompt input highlights keywords with rainbow effect', async ({ page }) => {
+  await page.goto('/');
+  const textarea = page.locator('.rich-prompt-input__textarea');
+  await textarea.fill('research this topic');
+
+  const overlay = page.locator('.rich-prompt-input__overlay');
+  await expect(overlay).toBeVisible();
+
+  const keyword = overlay.locator('.rainbow-keyword');
+  await expect(keyword).toHaveText('research');
 });
 
 test('mesh graph shows empty state initially', async ({ page }) => {
@@ -20,7 +32,7 @@ test('mesh graph shows empty state initially', async ({ page }) => {
 
 test('prompt input shows processing status after submit', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.prompt-input__textarea').fill('what is a llm?');
+  await page.locator('.rich-prompt-input__textarea').fill('what is a llm?');
   await page.locator('.prompt-input__submit').click();
 
   await expect(page.locator('.prompt-input__status')).toContainText(/Queued prompt:|Routing prompt:|Processing response:/);
