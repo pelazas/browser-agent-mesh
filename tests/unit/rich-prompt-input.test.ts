@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { highlightKeywords } from '@ui/components/useRichPromptInput';
 
+function rainbowKeyword(word: string): string {
+  const chars = Array.from(word)
+    .map((char, i) => `<span class="rainbow-char" style="--char-index:${i}">${char}</span>`)
+    .join('');
+  return `<span class="rainbow-keyword">${chars}</span>`;
+}
+
 describe('highlightKeywords', () => {
   it('returns empty string for empty input', () => {
     expect(highlightKeywords('')).toBe('');
@@ -13,20 +20,18 @@ describe('highlightKeywords', () => {
 
   it('wraps a single keyword', () => {
     expect(highlightKeywords('research this')).toBe(
-      '<span class="rainbow-keyword">research</span> this',
+      `${rainbowKeyword('research')} this`,
     );
   });
 
   it('wraps multiple keywords', () => {
     expect(highlightKeywords('research and scrape')).toBe(
-      '<span class="rainbow-keyword">research</span> and <span class="rainbow-keyword">scrape</span>',
+      `${rainbowKeyword('research')} and ${rainbowKeyword('scrape')}`,
     );
   });
 
   it('is case insensitive', () => {
-    expect(highlightKeywords('ScRaPe')).toBe(
-      '<span class="rainbow-keyword">ScRaPe</span>',
-    );
+    expect(highlightKeywords('ScRaPe')).toBe(rainbowKeyword('ScRaPe'));
   });
 
   it('does not match partial words', () => {
@@ -36,34 +41,34 @@ describe('highlightKeywords', () => {
 
   it('matches british spelling summarise', () => {
     expect(highlightKeywords('summarise this')).toBe(
-      '<span class="rainbow-keyword">summarise</span> this',
+      `${rainbowKeyword('summarise')} this`,
     );
   });
 
   it('matches find and search', () => {
     expect(highlightKeywords('find the answer')).toBe(
-      '<span class="rainbow-keyword">find</span> the answer',
+      `${rainbowKeyword('find')} the answer`,
     );
     expect(highlightKeywords('search for it')).toBe(
-      '<span class="rainbow-keyword">search</span> for it',
+      `${rainbowKeyword('search')} for it`,
     );
   });
 
   it('matches extract', () => {
     expect(highlightKeywords('extract data')).toBe(
-      '<span class="rainbow-keyword">extract</span> data',
+      `${rainbowKeyword('extract')} data`,
     );
   });
 
   it('matches summarize', () => {
     expect(highlightKeywords('summarize report')).toBe(
-      '<span class="rainbow-keyword">summarize</span> report',
+      `${rainbowKeyword('summarize')} report`,
     );
   });
 
   it('preserves newlines', () => {
     expect(highlightKeywords('research\nscrape')).toBe(
-      '<span class="rainbow-keyword">research</span>\n<span class="rainbow-keyword">scrape</span>',
+      `${rainbowKeyword('research')}\n${rainbowKeyword('scrape')}`,
     );
   });
 });

@@ -202,19 +202,20 @@ body {
   border-color: var(--accent);
 }
 
-@keyframes rainbow-shift {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
+@keyframes rainbow-cycle {
+  0% { color: #ff0000; }
+  14.2857% { color: #ff7f00; }
+  28.5714% { color: #ffff00; }
+  42.8571% { color: #00ff00; }
+  57.1429% { color: #0000ff; }
+  71.4286% { color: #4b0082; }
+  85.7143% { color: #9400d3; }
+  100% { color: #ff0000; }
 }
 
-.rainbow-keyword {
-  background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-weight: 600;
-  animation: rainbow-shift 3s linear infinite;
+.rainbow-char {
+  animation: rainbow-cycle 1.4s steps(7) infinite;
+  animation-delay: calc(var(--char-index) * -0.2s);
 }
 
 .prompt-input__submit {

@@ -10,11 +10,19 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;');
 }
 
+function wrapKeywordChars(keyword: string): string {
+  const chars = Array.from(keyword);
+  const wrapped = chars
+    .map((char, i) => `<span class="rainbow-char" style="--char-index:${i}">${char}</span>`)
+    .join('');
+  return `<span class="rainbow-keyword">${wrapped}</span>`;
+}
+
 export function highlightKeywords(text: string): string {
   if (!text) return '';
   const pattern = getKeywordPattern();
   const escaped = escapeHtml(text);
-  return escaped.replace(pattern, '<span class="rainbow-keyword">$1</span>');
+  return escaped.replace(pattern, (match) => wrapKeywordChars(match));
 }
 
 export interface UseRichPromptInputResult {
