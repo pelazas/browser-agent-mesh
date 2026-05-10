@@ -156,21 +156,64 @@ body {
   gap: 8px;
 }
 
-.prompt-input__textarea {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-primary);
-  padding: 12px;
-  font-size: 0.9375rem;
-  font-family: inherit;
-  resize: vertical;
+.rich-prompt-input__container {
+  position: relative;
   min-height: 80px;
 }
 
-.prompt-input__textarea:focus {
+.rich-prompt-input__overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.rich-prompt-input__textarea {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: transparent;
+  caret-color: var(--text-primary);
+  padding: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: none;
+  min-height: 80px;
+  overflow: hidden;
+}
+
+.rich-prompt-input__textarea:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+@keyframes rainbow-shift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.rainbow-keyword {
+  background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 600;
+  animation: rainbow-shift 3s linear infinite;
 }
 
 .prompt-input__submit {
