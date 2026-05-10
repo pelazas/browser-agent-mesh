@@ -33,7 +33,7 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 ### Bridge (MCP Tool Agent)
 - **Trigger:** DAG-ready `scrape` tasks on the Blackboard
 - **Claims** tasks via CRDT lock to prevent duplicate execution
-- **Does:** Web scraping (no CORS in browser context), writes structured scrape results back to the DAG task node, OPFS read/write, format+stream data
+- **Does:** Web scraping (subject to standard browser CORS; cross-origin requests require a cooperating origin or CORS proxy), writes structured scrape results back to the DAG task node, OPFS read/write, format+stream data
 - **Does not:** run LLMs
 - **File:** `src/agents/bridge/bridge.ts`
 
