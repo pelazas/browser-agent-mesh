@@ -487,6 +487,108 @@ body {
   color: #fca5a5;
 }
 
+/* Activity Log */
+.workflow-view__activity-log {
+  margin-top: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 0;
+}
+
+.workflow-view__activity-log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.workflow-view__activity-log::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.workflow-view__phase {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  font-style: italic;
+}
+
+.workflow-view__phase--synthesizing {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 10px;
+  color: var(--accent);
+}
+
+.workflow-activity-row {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(51, 51, 72, 0.3);
+}
+
+.workflow-activity-row:last-child {
+  border-bottom: none;
+}
+
+.workflow-activity-row__main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.workflow-activity-row__status {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-width: 54px;
+}
+
+.workflow-activity-row--pending .workflow-activity-row__status { color: var(--text-secondary); }
+.workflow-activity-row--claimed .workflow-activity-row__status { color: var(--warning); }
+.workflow-activity-row--running .workflow-activity-row__status { color: var(--accent); }
+.workflow-activity-row--completed .workflow-activity-row__status { color: var(--success); }
+.workflow-activity-row--failed .workflow-activity-row__status { color: var(--error); }
+
+.workflow-activity-row__desc {
+  flex: 1;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.workflow-activity-row--completed .workflow-activity-row__desc {
+  color: var(--text-secondary);
+}
+
+.workflow-activity-row__elapsed {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.workflow-activity-row--running .workflow-activity-row__elapsed {
+  color: var(--accent);
+}
+
+.workflow-activity-row__telemetry {
+  margin-top: 2px;
+  margin-left: 62px;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  opacity: 0.75;
+}
+
+.workflow-activity-row__telemetry--error {
+  color: var(--error);
+  opacity: 1;
+}
+
+
 /* Blackboard Debugger */
 .debugger {
   border-top: 1px solid var(--border);
