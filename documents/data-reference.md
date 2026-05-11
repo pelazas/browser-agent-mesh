@@ -241,6 +241,8 @@ interface ReduceResultFragment {
 
 Scrape reductions are designed for human-readable narrative summaries. `summary` should contain the main executive summary text, while `highlights` can add a few concise supporting points when they improve readability.
 
+For PDF/document scrapes, the reducer prepares the extracted text to isolate the body, splits it into chunks, summarizes each chunk, and synthesizes a unified summary. For HTML scrapes, markup is converted to extracted text before summarization. Unusable scrape content fails the reduce task instead of producing a placeholder.
+
 ### PromptRequestEntry
 ```ts
 interface PromptRequestEntry {

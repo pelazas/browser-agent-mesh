@@ -107,6 +107,17 @@ function seedWorkflow(
 }
 
 function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
+  return seedReduceWorkflowWithResult(doc, {
+    content: scrapeContent,
+    contentType: 'text/plain',
+    format: 'text',
+  });
+}
+
+function seedReduceWorkflowWithResult(
+  doc: Y.Doc,
+  scrapeResult: { content: string; contentType: string; format: 'html' | 'text' },
+): TaskNode {
   const now = Date.now();
 
   const scrapeTask = createTask({
@@ -119,10 +130,10 @@ function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
     result: {
       type: 'scrape_result',
       url: 'https://example.com/source',
-      contentType: 'text/plain',
-      format: 'text',
-      content: scrapeContent,
-      bytes: scrapeContent.length,
+      contentType: scrapeResult.contentType,
+      format: scrapeResult.format,
+      content: scrapeResult.content,
+      bytes: scrapeResult.content.length,
       selector: null,
     },
     createdAt: now,
@@ -151,9 +162,21 @@ function expectNoReaderNoise(value: string): void {
   expect(value).not.toContain('Markdown Content:');
 }
 
+function expectToContainKeywords(value: string, keywords: string[]): void {
+  for (const keyword of keywords) {
+    expect(value).toContain(keyword);
+  }
+}
+
+function forceHeuristicReducePath(): void {
+  mockedSelectBestModel.mockReturnValue(selectedModel);
+  mockedGetEngineStatus.mockReturnValue('unloaded');
+  mockedGetCurrentModel.mockReturnValue(null);
+}
+
 describe('NodeWorkerAgent WebLLM integration', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockedLoadModel.mockResolvedValue(undefined);
   });
 
@@ -353,6 +376,90 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expectNoReaderNoise(result.summary as string);
   });
 
+  it('keeps heuristic PDF reduce summaries anchored in body content instead of front matter', async () => {
+    forceHeuristicReducePath();
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflowWithResult(
+      doc,
+      {
+        contentType: 'application/pdf',
+        format: 'text',
+        content: [
+          '# Incident Response Manual',
+          '',
+          'Confidential internal draft for training distribution only.',
+          '',
+          'Table of Contents',
+          '1. Escalation model',
+          '2. Severity rubric',
+          '3. Recovery checkpoints',
+          '',
+          'This manual explains how service owners classify incidents, coordinate cross-team escalation, and restore customer-facing systems during business-critical outages.',
+          '',
+          'It also defines who makes severity decisions, which communications channels are required, and how teams confirm recovery before closing an event.',
+        ].join('\n'),
+      },
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(result.type).toBe('reduce_result');
+    expectToContainKeywords(result.summary as string, ['incidents', 'escalation', 'outages']);
+    expect(result.summary).not.toContain('Confidential internal draft');
+    expect(result.summary).not.toContain('Table of Contents');
+    expect(result.summary).not.toContain('Escalation model');
+  });
+
+  it('keeps heuristic PDF reduce summaries anchored in late body content', async () => {
+    forceHeuristicReducePath();
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflowWithResult(
+      doc,
+      {
+        contentType: 'application/pdf',
+        format: 'text',
+        content: [
+          '# Procurement Playbook',
+          '',
+          'Prepared for vendor onboarding workshops.',
+          '',
+          'Revision 7.2',
+          '',
+          'Page 1 of 18',
+          '',
+          'Document Control',
+          'Owner: Operations',
+          '',
+          'Approval Log',
+          'Finance, Legal, Security',
+          '',
+          'This playbook explains how procurement teams evaluate vendor risk, negotiate renewal terms, and document cost-saving decisions before contracts are approved.',
+          '',
+          'It highlights the checkpoints that matter for legal review, security validation, and executive sign-off on larger spend commitments.',
+        ].join('\n'),
+      },
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(result.type).toBe('reduce_result');
+    expectToContainKeywords(result.summary as string, ['vendor', 'security', 'contracts']);
+    expect(result.summary).not.toContain('Prepared for vendor onboarding workshops');
+    expect(result.summary).not.toContain('Revision 7.2');
+    expect(result.summary).not.toContain('Page 1 of 18');
+    expect(result.summary).not.toContain('Document Control');
+  });
+
   it('fails reduce tasks without a workflow context', async () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
     const task = createTask({
@@ -367,7 +474,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     ).rejects.toThrow(/requires workflowId/);
   });
 
-  it('returns a placeholder for reduce tasks with no scrape predecessor', async () => {
+  it('fails reduce tasks with no usable scrape predecessor content', async () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
     const doc = seedAgentDoc(agent);
 
@@ -380,13 +487,12 @@ describe('NodeWorkerAgent WebLLM integration', () => {
 
     seedWorkflow(doc, 'wf-reduce', [reduceTask]);
 
-    const result = await (
-      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
-    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
-
-    expect(result.type).toBe('reduce_result');
-    expect(result.summary).toContain('No scraped document content was available');
-    expect(result.highlights).toEqual([]);
+    await expect(
+      (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(
+        reduceTask,
+        'wf-reduce',
+      ),
+    ).rejects.toThrow(/No usable scrape content was available/);
   });
 
   it('uses the document title as a fallback summary when cleaned scrape content has no body text', async () => {
@@ -436,7 +542,9 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(mockedChatStream).toHaveBeenCalledTimes(1);
+    expect(mockedChatStream).toHaveBeenCalledTimes(2);
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('Document chunk 1 of 1');
+    expect(mockedChatStream.mock.calls[1]?.[0]?.[0]?.content).toContain('Chunk summaries');
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBe('AWS Cloud Patterns');
     expect(result.summary).toContain('AWS design patterns');
@@ -444,6 +552,172 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       'Explains when to apply common modernization patterns.',
       'Connects each pattern to reliability and migration decisions.',
     ]);
+  });
+
+  it('summarizes extracted text instead of raw HTML markup for HTML scrapes', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream.mockResolvedValue({
+      message: { role: 'assistant', content: '{"title":"Release Notes","summary":"This page summarizes release updates, rollout notes, and migration guidance for product teams.","highlights":["Includes rollout guidance."]}' },
+      tokensGenerated: 30,
+      tokensPerSec: 20,
+    });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflowWithResult(
+      doc,
+      {
+        contentType: 'text/html',
+        format: 'html',
+        content: '<article><h1>Release Notes</h1><p>This page summarizes release updates, rollout notes, and migration guidance for product teams.</p><p>Includes rollout guidance.</p></article>',
+      },
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(mockedChatStream).toHaveBeenCalledTimes(1);
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('Document text:');
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).not.toContain('Document chunk 1 of 1');
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('Release Notes');
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('This page summarizes release updates');
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).not.toContain('<article>');
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).not.toContain('<p>');
+    expect(result).toMatchObject({
+      type: 'reduce_result',
+      title: 'Release Notes',
+      summary: 'This page summarizes release updates, rollout notes, and migration guidance for product teams.',
+      highlights: ['Includes rollout guidance.'],
+    });
+  });
+
+  it('summarizes PDF scrape content through prepared chunks and final synthesis', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: 'This chunk covers incident classification, escalation ownership, and outage recovery steps.',
+        },
+        tokensGenerated: 25,
+        tokensPerSec: 20,
+      })
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: '{"title":"Incident Response Manual","summary":"This manual explains how teams classify incidents, coordinate escalation, and verify service recovery during critical outages.","highlights":["Defines severity decision ownership.","Requires specific communications channels during incidents."]}',
+        },
+        tokensGenerated: 45,
+        tokensPerSec: 22,
+      });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflowWithResult(
+      doc,
+      {
+        contentType: 'application/pdf',
+        format: 'text',
+        content: [
+          '# Incident Response Manual',
+          '',
+          'Confidential internal draft for training distribution only.',
+          '',
+          'This manual explains how teams classify incidents, coordinate escalation, and restore customer-facing systems during business-critical outages.',
+          '',
+          'It also defines severity decision owners, required communications channels, and how service owners confirm recovery before closing an event.',
+        ].join('\n'),
+      },
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(mockedChatStream).toHaveBeenCalledTimes(2);
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('Document chunk 1 of 1');
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).not.toContain('Confidential internal draft');
+    expect(mockedChatStream.mock.calls[1]?.[0]?.[0]?.content).toContain('Chunk summaries');
+    expect(result).toMatchObject({
+      type: 'reduce_result',
+      title: 'Incident Response Manual',
+      summary: 'This manual explains how teams classify incidents, coordinate escalation, and verify service recovery during critical outages.',
+      highlights: [
+        'Defines severity decision ownership.',
+        'Requires specific communications channels during incidents.',
+      ],
+    });
+  });
+
+  it('parses final synthesis JSON wrapped in prose and fenced markdown', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: 'This chunk covers vendor risk review, contract approvals, and security checkpoints.',
+        },
+        tokensGenerated: 20,
+        tokensPerSec: 19,
+      })
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: [
+            'Here is the synthesized result:',
+            '',
+            '```json',
+            '{"title":"Procurement Playbook","summary":"This playbook explains how procurement teams evaluate vendors, coordinate legal and security review, and approve contracts with clearer spending controls.","highlights":["Covers vendor risk review.","Explains legal and security checkpoints."]}',
+            '```',
+          ].join('\n'),
+        },
+        tokensGenerated: 40,
+        tokensPerSec: 23,
+      });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflowWithResult(
+      doc,
+      {
+        contentType: 'application/pdf',
+        format: 'text',
+        content: [
+          '# Procurement Playbook',
+          '',
+          'Prepared for vendor onboarding workshops.',
+          '',
+          'This playbook explains how procurement teams evaluate vendor risk, negotiate renewal terms, and document cost-saving decisions before contracts are approved.',
+          '',
+          'It highlights the checkpoints that matter for legal review, security validation, and executive sign-off on larger spend commitments.',
+        ].join('\n'),
+      },
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(mockedChatStream).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      type: 'reduce_result',
+      title: 'Procurement Playbook',
+      summary: 'This playbook explains how procurement teams evaluate vendors, coordinate legal and security review, and approve contracts with clearer spending controls.',
+      highlights: [
+        'Covers vendor risk review.',
+        'Explains legal and security checkpoints.',
+      ],
+    });
   });
 
   it('falls back to heuristic reduce when LLM returns unparseable JSON', async () => {
@@ -472,10 +746,49 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(mockedChatStream).toHaveBeenCalledTimes(1);
+    expect(mockedChatStream).toHaveBeenCalledTimes(2);
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('Document chunk 1 of 1');
+    expect(mockedChatStream.mock.calls[1]?.[0]?.[0]?.content).toContain('Chunk summaries');
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBeTypeOf('string');
     expect(result.summary).toBeTypeOf('string');
+  });
+
+  it('falls back to title-only summary when chunk JSON cannot be parsed and prepared body text is empty', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream.mockResolvedValue({
+      message: { role: 'assistant', content: 'not json' },
+      tokensGenerated: 10,
+      tokensPerSec: 10,
+    });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      [
+        '# Incident Response Manual',
+        '',
+        'Confidential internal draft for training distribution only.',
+        '',
+        'Table of Contents',
+        '1. Escalation model',
+        '2. Severity rubric',
+      ].join('\n'),
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(mockedChatStream).toHaveBeenCalledTimes(2);
+    expect(mockedChatStream.mock.calls[0]?.[0]?.[0]?.content).toContain('Document chunk 1 of 1');
+    expect(mockedChatStream.mock.calls[1]?.[0]?.[0]?.content).toContain('Chunk summaries');
+    expect(result.title).toBe('Incident Response Manual');
+    expect(result.summary).toBe('Incident Response Manual');
+    expect(result.highlights).toEqual([]);
   });
 
   it('fails reduce tasks when scrape content is empty after cleanup', async () => {

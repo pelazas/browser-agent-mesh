@@ -11,6 +11,7 @@ import {
 import type { Edge, GPUProfile, TaskNode } from '@core/blackboard/schema';
 import { chatStream, getCurrentModel, getEngineStatus, loadModel, selectBestModel } from '@webllm/index';
 import { DAG } from '@core/graph/dag';
+import { preparePdfDocument } from './pdf-summary';
 
 const STREAM_FLUSH_INTERVAL_MS = 150;
 const STREAM_FLUSH_MIN_CHARS = 24;
@@ -183,37 +184,41 @@ export class NodeWorkerAgent extends BaseAgent {
       const predecessorResults = this.getCompletedPredecessorResults(workflowId, task.id);
 
       let scrapeContent: string | null = null;
+      let scrapeContentType: string | null = null;
+      let scrapeFormat: string | null = null;
       for (const result of predecessorResults) {
         if (
           typeof result === 'object' &&
           result !== null &&
           (result as Record<string, unknown>).type === 'scrape_result'
         ) {
-          const content = (result as Record<string, unknown>).content;
+          const typedResult = result as Record<string, unknown>;
+          const content = typedResult.content;
           if (typeof content === 'string' && content.trim().length > 0) {
             scrapeContent = content;
+            scrapeContentType = typeof typedResult.contentType === 'string' ? typedResult.contentType : null;
+            scrapeFormat = typeof typedResult.format === 'string' ? typedResult.format : null;
             break;
           }
         }
       }
 
       if (!scrapeContent) {
-        return {
-          type: 'reduce_result',
-          sourceType: 'scrape_result',
-          title: null,
-          summary: `No scraped document content was available to summarize for: ${task.description}`,
-          highlights: [],
-          confidence: DEFAULT_REDUCE_CONFIDENCE,
-        };
+        throw new Error(`No usable scrape content was available for: ${task.description}`);
       }
 
-      const cleanedText = this.cleanExtractedDocumentText(scrapeContent);
-      if (!cleanedText.trim()) {
+      const normalizedScrapeContent = scrapeFormat === 'html'
+        ? this.extractTextFromHtml(scrapeContent)
+        : scrapeContent;
+
+      if (!normalizedScrapeContent.trim()) {
         throw new Error('Scrape content was empty after cleanup');
       }
 
-      const llmSummary = await this.summarizeWithLlm(cleanedText);
+      const documentLikeText = this.isDocumentLikeScrape(scrapeContentType, scrapeFormat);
+      const llmSummary = documentLikeText
+        ? await this.summarizePreparedDocumentWithLlm(preparePdfDocument(normalizedScrapeContent))
+        : await this.summarizeWithLlm(normalizedScrapeContent);
       if (llmSummary) {
         return {
           type: 'reduce_result',
@@ -225,9 +230,24 @@ export class NodeWorkerAgent extends BaseAgent {
         };
       }
 
-      const title = this.deriveDocumentTitle(cleanedText);
-      const summary = this.buildNarrativeSummary(cleanedText, title);
-      const highlights = this.buildHighlights(cleanedText, title);
+      const preparedDocument = documentLikeText
+        ? preparePdfDocument(normalizedScrapeContent)
+        : {
+            title: this.deriveDocumentTitle(normalizedScrapeContent),
+            cleanedText: normalizedScrapeContent.trim(),
+            bodyText: '',
+            chunks: [],
+          };
+      if (!preparedDocument.cleanedText.trim()) {
+        throw new Error('Scrape content was empty after cleanup');
+      }
+
+      const fallbackText = documentLikeText
+        ? preparedDocument.bodyText
+        : preparedDocument.cleanedText;
+      const title = preparedDocument.title ?? this.deriveDocumentTitle(fallbackText);
+      const summary = this.buildNarrativeSummary(fallbackText, title);
+      const highlights = this.buildHighlights(fallbackText, title);
 
       return {
         type: 'reduce_result',
@@ -310,31 +330,28 @@ export class NodeWorkerAgent extends BaseAgent {
     return results;
   }
 
-  private cleanExtractedDocumentText(raw: string): string {
-    const lines = raw.split('\n');
-    const cleaned: string[] = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (
-        trimmed.startsWith('Title:') ||
-        trimmed.startsWith('URL Source:') ||
-        trimmed.startsWith('Published Time:') ||
-        trimmed.startsWith('Markdown Content:') ||
-        /^>\s*[ivxlcdm0-9]+/iu.test(trimmed)
-      ) {
-        continue;
-      }
-      cleaned.push(line);
-    }
-    return cleaned.join('\n').trim();
-  }
-
   private deriveDocumentTitle(text: string): string | null {
     const match = text.match(/^#\s+(.+)$/m);
     if (match) return match[1].trim();
 
     const firstLine = text.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
     return firstLine ?? null;
+  }
+
+  private isDocumentLikeScrape(contentType: string | null, format: string | null): boolean {
+    if (contentType === 'application/pdf') {
+      return true;
+    }
+
+    if (format !== 'text') {
+      return false;
+    }
+
+    if (!contentType) {
+      return true;
+    }
+
+    return !contentType.includes('html');
   }
 
   private buildNarrativeSummary(text: string, title: string | null): string {
@@ -363,6 +380,118 @@ export class NodeWorkerAgent extends BaseAgent {
       : sentences;
 
     return filtered.slice(0, 3);
+  }
+
+  private extractTextFromHtml(html: string): string {
+    return html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<\s*\/p\s*>/gi, '\n\n')
+      .replace(/<\s*\/div\s*>/gi, '\n\n')
+      .replace(/<\s*\/h[1-6]\s*>/gi, '\n\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  private async summarizePreparedDocumentWithLlm(preparedDocument: {
+    title: string | null;
+    cleanedText: string;
+    bodyText: string;
+    chunks: string[];
+  }): Promise<{
+    title: string | null;
+    summary: string;
+    highlights: string[];
+  } | null> {
+    try {
+      await this.ensureModelReady();
+      const status = getEngineStatus();
+      if (status !== 'ready') {
+        this.log.warn('LLM not ready for summarization, falling back to heuristics', { status });
+        return null;
+      }
+
+      const sourceText = preparedDocument.bodyText || preparedDocument.cleanedText;
+      const chunks = preparedDocument.chunks.length > 0 ? preparedDocument.chunks : [sourceText];
+      const chunkSummaries: string[] = [];
+
+      for (const [index, chunk] of chunks.entries()) {
+        const chunkPrompt = [
+          'You are summarizing one prepared document chunk.',
+          `Document chunk ${index + 1} of ${chunks.length}.`,
+          preparedDocument.title ? `Document title: ${preparedDocument.title}` : null,
+          'Return a short narrative summary focused on purpose, key ideas, and practical relevance.',
+          'Do not include front matter, section inventories, or JSON.',
+          '',
+          'Chunk text:',
+          '---',
+          chunk,
+        ].filter((line): line is string => Boolean(line)).join('\n');
+
+        const chunkResponse = await chatStream(
+          [{ role: 'user', content: chunkPrompt }],
+          undefined,
+          () => { /* no progress callback needed for reduce */ },
+        );
+
+        const chunkSummary = chunkResponse.message.content.trim();
+        if (!chunkSummary) {
+          return null;
+        }
+
+        chunkSummaries.push(chunkSummary);
+      }
+
+      const prompt = [
+        'You are a document summarizer. Synthesize the chunk summaries below and return ONLY a JSON object',
+        'with this exact shape (no markdown code blocks, no extra text):',
+        '',
+        '{"title":"...","summary":"2-4 paragraphs that explain what the document is about, the main ideas it covers, and why it matters","highlights":["Concrete point or practical takeaway as a full sentence",...]}',
+        '',
+        'Write a human-readable executive summary, not a table of contents.',
+        'Do not list section names unless they are necessary to explain the document.',
+        'Explain the document purpose, the main themes, and the practical relevance.',
+        'Limit highlights to 3 items.',
+        preparedDocument.title ? `Prefer this title when accurate: ${preparedDocument.title}` : null,
+        '',
+        'Chunk summaries:',
+        '---',
+        chunkSummaries.map((summary, index) => `Chunk ${index + 1}: ${summary}`).join('\n\n'),
+      ].filter((line): line is string => Boolean(line)).join('\n');
+
+      const response = await chatStream(
+        [{ role: 'user', content: prompt }],
+        undefined,
+        () => { /* no progress callback needed for reduce */ },
+      );
+
+      const raw = response.message.content.trim();
+      const parsed = this.tryParseSummaryJson(raw);
+
+      if (parsed) {
+        this.log.info('LLM summarization succeeded', {
+          title: parsed.title,
+          summaryLength: parsed.summary.length,
+          highlightCount: parsed.highlights.length,
+        });
+        return parsed;
+      }
+
+      this.log.warn('LLM summarization returned unparseable JSON, falling back to heuristics', { raw: raw.slice(0, 200) });
+      return null;
+    } catch (err) {
+      this.log.warn('LLM summarization failed, falling back to heuristics', { error: String(err) });
+      return null;
+    }
   }
 
   private async summarizeWithLlm(text: string): Promise<{
@@ -431,8 +560,11 @@ export class NodeWorkerAgent extends BaseAgent {
     highlights: string[];
   } | null {
     try {
-      // Strip markdown code fences if present
-      const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const cleaned = this.extractJsonObject(raw);
+      if (!cleaned) {
+        return null;
+      }
+
       const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
       const title = typeof parsed.title === 'string' ? parsed.title : null;
@@ -449,5 +581,55 @@ export class NodeWorkerAgent extends BaseAgent {
     } catch {
       return null;
     }
+  }
+
+  private extractJsonObject(raw: string): string | null {
+    const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fencedMatch?.[1]) {
+      return fencedMatch[1].trim();
+    }
+
+    const start = raw.indexOf('{');
+    if (start < 0) {
+      return null;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < raw.length; index += 1) {
+      const char = raw[index];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) {
+        continue;
+      }
+
+      if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          return raw.slice(start, index + 1).trim();
+        }
+      }
+    }
+
+    return null;
   }
 }

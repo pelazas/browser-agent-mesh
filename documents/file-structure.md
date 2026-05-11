@@ -56,7 +56,8 @@ browser-agent-mesh/
 │   │   │   ├── worker.ts                # Poll + claim + execute loop, CRDT lock integration
 │   │   │   ├── inference.ts             # WebLLM inference runner
 │   │   │   ├── rag.ts                   # RAG pipeline (retrieve → evaluate → generate)
-│   │   │   └── claimer.ts               # Task claiming helper (wraps lock.ts)
+│   │   │   ├── claimer.ts               # Task claiming helper (wraps lock.ts)
+│   │   │   └── pdf-summary.ts           # PDF/document cleanup, body detection, chunking
 │   │   ├── bridge/
 │   │   │   ├── index.ts
 │   │   │   ├── bridge.ts                # Tool call polling + execution
@@ -126,7 +127,8 @@ browser-agent-mesh/
 │   ├── unit/
 │   │   ├── id.test.ts                   # ID generation uniqueness
 │   │   ├── dag.test.ts                  # DAG construction, topology, readiness
-│   │   └── validator.test.ts            # Conditional edge evaluation, field resolution
+│   │   ├── validator.test.ts            # Conditional edge evaluation, field resolution
+│   │   └── pdf-summary.test.ts          # PDF/document preparation helper coverage
 │   └── e2e/
 │       └── app.spec.ts                  # Page load, prompt input, mesh graph smoke tests
 │
