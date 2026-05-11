@@ -14,8 +14,8 @@ interface ParsedTask {
 }
 
 export class SentinelAgent extends BaseAgent {
-  constructor(doc?: Y.Doc) {
-    super({ role: 'sentinel', doc });
+  constructor(doc?: Y.Doc, tabId?: string) {
+    super({ role: 'sentinel', doc, tabId });
   }
 
   protected async run(): Promise<void> {

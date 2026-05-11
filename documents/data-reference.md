@@ -41,7 +41,9 @@ bam-blackboard: Y.Map
   │     └── {nodeId}: Y.Map
   │           ├── id: string
   │           ├── role: "sentinel" | "worker" | "bridge" | "synthesizer"
+  │           ├── tabId: string
   │           ├── gpu: GPUProfile | null
+  │           ├── selectedModelId: string | null
   │           ├── status: "idle" | "busy" | "offline"
   │           ├── joinedAt: number (ms)
   │           ├── lastHeartbeat: number (ms)
@@ -95,6 +97,8 @@ interface TaskNode {
 ```
 
 Workflow task execution is coordinated by per-workflow CRDT locks. Executors poll for DAG-ready `pending` tasks, acquire `activeWorkflows[workflowId].locks[taskId]`, then transition the task to `running`. On completion they write `result` and mark the task `completed`; malformed or execution errors mark it `failed`.
+
+Node entries are per agent, not per browser tab. Agents spawned from the same browser tab share the same `tabId`, which the UI uses to derive a per-tab view. For worker nodes, `selectedModelId` reflects the currently loaded model after selection succeeds.
 
 ### Edge
 ```ts

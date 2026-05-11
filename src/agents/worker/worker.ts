@@ -17,6 +17,7 @@ const STREAM_FLUSH_MIN_CHARS = 24;
 
 interface NodeConfig {
   gpuProfile: GPUProfile | null;
+  tabId?: string;
 }
 
 export class NodeWorkerAgent extends BaseAgent {
@@ -24,7 +25,7 @@ export class NodeWorkerAgent extends BaseAgent {
   private modelId: string | null = null;
 
   constructor(config: NodeConfig) {
-    super({ role: 'worker' });
+    super({ role: 'worker', tabId: config.tabId, gpu: config.gpuProfile });
     this.gpuProfile = config.gpuProfile;
   }
 
@@ -192,6 +193,7 @@ export class NodeWorkerAgent extends BaseAgent {
     }
 
     this.modelId = model.id;
+    this.syncNodeMetadata({ selectedModelId: model.id, gpu: this.gpuProfile });
 
     if (getEngineStatus() === 'ready' && getCurrentModel() === model.id) {
       return;

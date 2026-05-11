@@ -35,8 +35,8 @@ class BridgeWorkerAgent extends BridgeAgent {
 
 let agent: BridgeWorkerAgent | null = null;
 
-function init(port: MessagePort): void {
-  agent = new BridgeWorkerAgent();
+function init(port: MessagePort, tabId: string): void {
+  agent = new BridgeWorkerAgent(tabId);
   agent.connect(port);
   agent.registerTools();
   void agent.start().catch((err) => log.error('agent failed', { error: String(err) }));
@@ -45,8 +45,8 @@ function init(port: MessagePort): void {
   self.postMessage({ type: 'ready', role: 'bridge' });
 }
 
-self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort }>) => {
+self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort; tabId: string }>) => {
   if (e.data.type === 'init') {
-    init(e.data.port);
+    init(e.data.port, e.data.tabId);
   }
 };

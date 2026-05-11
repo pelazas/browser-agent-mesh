@@ -24,7 +24,9 @@ export interface GPUProfile {
 export interface NodeProfile {
   id: string;
   role: AgentRole;
+  tabId: string;
   gpu: GPUProfile | null;
+  selectedModelId: string | null;
   status: NodeStatus;
   joinedAt: number;
   lastHeartbeat: number;

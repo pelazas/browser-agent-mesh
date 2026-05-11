@@ -110,13 +110,16 @@ export function registerNode(
   nodeId: string,
   role: string,
   gpu: unknown | null,
+  tabId: string,
 ): Y.Map<unknown> {
   const nodes = getNodes(doc);
 
   const node = new Y.Map<unknown>();
   node.set('id', nodeId);
   node.set('role', role);
+  node.set('tabId', tabId);
   node.set('gpu', gpu);
+  node.set('selectedModelId', null);
   node.set('status', 'idle');
   node.set('joinedAt', Date.now());
   node.set('lastHeartbeat', Date.now());
@@ -124,4 +127,22 @@ export function registerNode(
 
   nodes.set(nodeId, node);
   return node;
+}
+
+export function updateNodeMetadata(
+  doc: Y.Doc,
+  nodeId: string,
+  fields: Record<string, unknown>,
+): boolean {
+  const node = getNodes(doc).get(nodeId);
+  if (!node) return false;
+
+  doc.transact(() => {
+    for (const [key, value] of Object.entries(fields)) {
+      node.set(key, value);
+    }
+    node.set('lastHeartbeat', Date.now());
+  });
+
+  return true;
 }

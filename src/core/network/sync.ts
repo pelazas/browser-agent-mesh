@@ -170,11 +170,12 @@ export class YjsSyncProvider {
     return this.provider.awareness.getStates();
   }
 
-  registerSelfAsNode(role: string, gpu: unknown | null): void {
+  registerSelfAsNode(role: string, gpu: unknown | null, tabId: string): void {
     const nodeId = this.getNodeId();
-    registerNode(this.doc, nodeId, role, gpu);
+    registerNode(this.doc, nodeId, role, gpu, tabId);
     this.setLocalState('role', role);
     this.setLocalState('nodeId', nodeId);
+    this.setLocalState('tabId', tabId);
   }
 
   destroy(): void {
@@ -182,5 +183,4 @@ export class YjsSyncProvider {
     this.doc.destroy();
   }
 }
-
 

@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRootDoc, createWorkflow } from '@core/blackboard/root-doc';
+import { createRootDoc, createWorkflow, registerNode, getNodes } from '@core/blackboard/root-doc';
 import { NodeWorkerAgent } from '@agents/worker/worker';
 import type { GPUProfile, TaskNode } from '@core/blackboard/schema';
 import {
@@ -59,6 +59,23 @@ describe('NodeWorkerAgent WebLLM integration', () => {
 
     expect(mockedSelectBestModel).toHaveBeenCalledWith(4096, 'medium');
     expect(mockedLoadModel).toHaveBeenCalledWith('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+  });
+
+  it('stores the selected model on the worker node metadata', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('unloaded');
+    mockedGetCurrentModel.mockReturnValue(null);
+
+    const agent = new NodeWorkerAgent({ gpuProfile, tabId: 'tab-1' });
+    const doc = (agent as unknown as { doc: Y.Doc }).doc;
+    const nodeId = (agent as unknown as { nodeId: string }).nodeId;
+    registerNode(doc, nodeId, 'worker', gpuProfile, 'tab-1');
+
+    await (agent as unknown as { ensureModelReady: () => Promise<void> }).ensureModelReady();
+
+    const node = getNodes(doc).get(nodeId);
+    expect(node?.get('selectedModelId')).toBe('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    expect(node?.get('tabId')).toBe('tab-1');
   });
 
   it('executes llm_inference tasks with streamed chat()', async () => {

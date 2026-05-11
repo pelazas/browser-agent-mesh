@@ -21,8 +21,8 @@ interface ScrapeTaskInput {
 }
 
 export class BridgeAgent extends BaseAgent {
-  constructor() {
-    super({ role: 'bridge' });
+  constructor(tabId?: string) {
+    super({ role: 'bridge', tabId });
   }
 
   protected async run(): Promise<void> {

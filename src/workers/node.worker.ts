@@ -6,9 +6,9 @@ const log = createLogger('node-worker');
 
 let agent: NodeWorkerAgent | null = null;
 
-async function init(port: MessagePort): Promise<void> {
+async function init(port: MessagePort, tabId: string): Promise<void> {
   const gpuProfile = await profileGPU();
-  agent = new NodeWorkerAgent({ gpuProfile });
+  agent = new NodeWorkerAgent({ gpuProfile, tabId });
   agent.connect(port);
   void agent.start().catch((err) => log.error('agent failed', { error: String(err) }));
 
@@ -24,9 +24,9 @@ async function init(port: MessagePort): Promise<void> {
   self.postMessage({ type: 'ready', role: 'worker', gpu: gpuProfile });
 }
 
-self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort }>) => {
+self.onmessage = (e: MessageEvent<{ type: string; port: MessagePort; tabId: string }>) => {
   if (e.data.type === 'init') {
-    init(e.data.port).catch((err) =>
+    init(e.data.port, e.data.tabId).catch((err) =>
       log.error('init failed', { error: String(err) }),
     );
   }

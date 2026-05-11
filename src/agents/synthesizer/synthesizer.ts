@@ -7,8 +7,8 @@ import type { Edge, TaskNode } from '@core/blackboard/schema';
 import { consolidate, deduplicate, mergeByConfidence } from '@agents/synthesizer/reducer';
 
 export class SynthesizerAgent extends BaseAgent {
-  constructor(doc?: Y.Doc) {
-    super({ role: 'synthesizer', doc });
+  constructor(doc?: Y.Doc, tabId?: string) {
+    super({ role: 'synthesizer', doc, tabId });
   }
 
   protected async run(): Promise<void> {

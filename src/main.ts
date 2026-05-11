@@ -10,6 +10,7 @@ import { initDatabase, checkOpfsAvailable } from '@core/persistence/database';
 import { initEventLog, captureYDocUpdate } from '@core/persistence/event-log';
 import { initCheckpoints, loadLatestCheckpoint, startPeriodicCheckpoint } from '@core/persistence/checkpoint';
 import { createLogger } from '@utils/logging';
+import { generateId } from '@utils/id';
 
 const log = createLogger('main');
 
@@ -23,6 +24,7 @@ let bridgeWorkerRef: Worker | null = null;
 let synthWorkerRef: Worker | null = null;
 // Stashed MessagePort for deferred transfer to SharedWorker
 let uiSyncPort2: MessagePort | null = null;
+const tabId = generateId();
 
 function detectCapabilities() {
   const hasWebGPU = 'gpu' in navigator;
@@ -109,7 +111,7 @@ function initSyncProvider(existingState?: Uint8Array): void {
   const roomName = 'browser-agent-mesh';
 
   syncProvider = new YjsSyncProvider({ signalingUrl, roomName });
-  syncProvider.registerSelfAsNode('ui', null);
+  syncProvider.registerSelfAsNode('ui', null, tabId);
   sharedDoc = syncProvider.getDoc();
 
   if (existingState && existingState.length > 0) {
@@ -226,7 +228,7 @@ function connectAgentWorker(worker: Worker | null, role: string): void {
 
   const channel = new MessageChannel();
   networkWorker.port.postMessage({ type: 'agent', payload: { role } }, [channel.port2]);
-  worker.postMessage({ type: 'init', port: channel.port1 }, [channel.port1]);
+  worker.postMessage({ type: 'init', port: channel.port1, tabId }, [channel.port1]);
   log.info('dedicated worker connected to shared worker', { role });
 }
 
