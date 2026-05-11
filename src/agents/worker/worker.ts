@@ -198,7 +198,14 @@ export class NodeWorkerAgent extends BaseAgent {
       }
 
       if (!scrapeContent) {
-        return { type: 'reduce_result', output: `Reduced: ${task.description}` };
+        return {
+          type: 'reduce_result',
+          sourceType: 'scrape_result',
+          title: null,
+          summary: `No scraped document content was available to summarize for: ${task.description}`,
+          highlights: [],
+          confidence: DEFAULT_REDUCE_CONFIDENCE,
+        };
       }
 
       const cleanedText = this.cleanExtractedDocumentText(scrapeContent);
@@ -212,25 +219,22 @@ export class NodeWorkerAgent extends BaseAgent {
           type: 'reduce_result',
           sourceType: 'scrape_result',
           title: llmSummary.title,
-          description: llmSummary.description,
-          sectionSummaries: llmSummary.sectionSummaries,
-          takeaways: llmSummary.takeaways,
+          summary: llmSummary.summary,
+          highlights: llmSummary.highlights,
           confidence: DEFAULT_REDUCE_CONFIDENCE,
         };
       }
 
       const title = this.deriveDocumentTitle(cleanedText);
-      const sectionSummaries = this.deriveSectionHeadings(cleanedText).map((name) => ({ name, summary: '' }));
-      const description = this.buildOverview(cleanedText);
-      const takeaways = this.deriveTakeaways(sectionSummaries);
+      const summary = this.buildNarrativeSummary(cleanedText, title);
+      const highlights = this.buildHighlights(cleanedText, title);
 
       return {
         type: 'reduce_result',
         sourceType: 'scrape_result',
         title,
-        description,
-        sectionSummaries,
-        takeaways,
+        summary,
+        highlights,
         confidence: DEFAULT_REDUCE_CONFIDENCE,
       };
     }
@@ -333,38 +337,38 @@ export class NodeWorkerAgent extends BaseAgent {
     return firstLine ?? null;
   }
 
-  private deriveSectionHeadings(text: string): string[] {
-    const headings: string[] = [];
-    const lines = text.split('\n');
+  private buildNarrativeSummary(text: string, title: string | null): string {
+    const paragraphs = text
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.replace(/^#+\s+/gm, '').replace(/\s+/g, ' ').trim())
+      .filter((paragraph) => paragraph.length > 0);
 
-    for (const line of lines) {
-      const headingMatch = line.match(/^(#{1,2})\s+(.+)$/);
-      if (headingMatch) {
-        headings.push(headingMatch[2].trim());
-      }
-    }
+    const body = title
+      ? paragraphs.filter((paragraph) => paragraph !== title)
+      : paragraphs;
 
-    return headings;
+    const summary = body.slice(0, 3).join('\n\n').trim();
+    return summary || title || text.replace(/^#+\s+/gm, '').replace(/\s+/g, ' ').trim();
   }
 
-  private buildOverview(text: string): string {
-    const lines = text.split('\n').map((l) => l.trim());
-    const nonHeadingLines = lines.filter((l) => l.length > 0 && !l.startsWith('#'));
-    return nonHeadingLines.slice(0, 3).join(' ').trim();
-  }
+  private buildHighlights(text: string, title: string | null): string[] {
+    const sentences = text
+      .replace(/^#+\s+/gm, '')
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
+      .filter((sentence) => sentence.length > 40);
 
-  private deriveTakeaways(sectionSummaries: Array<{ name: string }>): string[] {
-    const takeaways = sectionSummaries
-      .filter((item) => item.name.length > 0)
-      .map((item) => `Covers ${item.name}.`);
-    return takeaways.slice(0, 5);
+    const filtered = title
+      ? sentences.filter((sentence) => sentence !== title && !sentence.startsWith(title))
+      : sentences;
+
+    return filtered.slice(0, 3);
   }
 
   private async summarizeWithLlm(text: string): Promise<{
     title: string | null;
-    description: string;
-    sectionSummaries: Array<{ name: string; summary: string }>;
-    takeaways: string[];
+    summary: string;
+    highlights: string[];
   } | null> {
     try {
       await this.ensureModelReady();
@@ -383,11 +387,12 @@ export class NodeWorkerAgent extends BaseAgent {
         'You are a document summarizer. Read the text below and return ONLY a JSON object',
         'with this exact shape (no markdown code blocks, no extra text):',
         '',
-        '{"title":"...","description":"1-2 paragraphs explaining what this document says","sectionSummaries":[{"name":"Section title","summary":"1-2 sentences explaining what this section covers and why it matters"},...],"takeaways":["Notable insight as a full sentence",...]}',
+        '{"title":"...","summary":"2-4 paragraphs that explain what the document is about, the main ideas it covers, and why it matters","highlights":["Concrete point or practical takeaway as a full sentence",...]}',
         '',
-        'The description should clearly explain what the document is about and what it covers.',
-        'Each section summary must explain the section content, not just repeat the title.',
-        'Limit sectionSummaries to 6 items and takeaways to 5 items.',
+        'Write a human-readable executive summary, not a table of contents.',
+        'Do not list section names unless they are necessary to explain the document.',
+        'Explain the document purpose, the main themes, and the practical relevance.',
+        'Limit highlights to 3 items.',
         '',
         'Document text:',
         '---',
@@ -406,8 +411,8 @@ export class NodeWorkerAgent extends BaseAgent {
       if (parsed) {
         this.log.info('LLM summarization succeeded', {
           title: parsed.title,
-          sectionCount: parsed.sectionSummaries.length,
-          takeawayCount: parsed.takeaways.length,
+          summaryLength: parsed.summary.length,
+          highlightCount: parsed.highlights.length,
         });
         return parsed;
       }
@@ -422,9 +427,8 @@ export class NodeWorkerAgent extends BaseAgent {
 
   private tryParseSummaryJson(raw: string): {
     title: string | null;
-    description: string;
-    sectionSummaries: Array<{ name: string; summary: string }>;
-    takeaways: string[];
+    summary: string;
+    highlights: string[];
   } | null {
     try {
       // Strip markdown code fences if present
@@ -432,23 +436,16 @@ export class NodeWorkerAgent extends BaseAgent {
       const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
       const title = typeof parsed.title === 'string' ? parsed.title : null;
-      const description = typeof parsed.description === 'string' ? parsed.description : '';
-
-      const sectionSummaries = Array.isArray(parsed.sectionSummaries)
-        ? parsed.sectionSummaries
-            .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-            .map((item) => ({
-              name: typeof item.name === 'string' ? item.name : '',
-              summary: typeof item.summary === 'string' ? item.summary : '',
-            }))
-            .filter((item) => item.name.length > 0 && item.summary.length > 0)
+      const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+      const highlights = Array.isArray(parsed.highlights)
+        ? parsed.highlights.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
         : [];
 
-      const takeaways = Array.isArray(parsed.takeaways)
-        ? parsed.takeaways.filter((s): s is string => typeof s === 'string')
-        : [];
+      if (!summary) {
+        return null;
+      }
 
-      return { title, description, sectionSummaries, takeaways };
+      return { title, summary, highlights };
     } catch {
       return null;
     }

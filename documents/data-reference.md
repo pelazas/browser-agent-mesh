@@ -233,12 +233,13 @@ interface ReduceResultFragment {
   type: 'reduce_result';
   sourceType: 'scrape_result';
   title: string | null;
-  description: string;
-  sections: string[];
-  takeaways: string[];
+  summary: string;
+  highlights: string[];
   confidence: number;
 }
 ```
+
+Scrape reductions are designed for human-readable narrative summaries. `summary` should contain the main executive summary text, while `highlights` can add a few concise supporting points when they improve readability.
 
 ### PromptRequestEntry
 ```ts

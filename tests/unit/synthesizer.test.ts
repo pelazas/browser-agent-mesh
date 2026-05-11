@@ -136,12 +136,11 @@ describe('SynthesizerAgent', () => {
           type: 'reduce_result',
           sourceType: 'scrape_result',
           title: 'Cloud design patterns, architectures, and implementations',
-          description: 'This guide explains modernization design patterns on AWS.',
-          sectionSummaries: [
-            { name: 'Anti-corruption layer pattern', summary: 'Isolates legacy systems from new ones via a translation layer.' },
-            { name: 'Circuit breaker pattern', summary: 'Prevents cascading failures by stopping requests to failing services.' },
+          summary: 'This guide explains how AWS design patterns help teams modernize systems, choose resilient integration strategies, and understand the tradeoffs behind common cloud architecture decisions.',
+          highlights: [
+            'Patterns are presented as practical modernization tools rather than abstract theory.',
+            'The document emphasizes reliability, migration safety, and service boundaries.',
           ],
-          takeaways: ['The anti-corruption layer is essential when modernizing legacy systems.', 'Circuit breakers should be combined with retry logic for resilience.'],
           confidence: 0.85,
         },
       },
@@ -165,14 +164,12 @@ describe('SynthesizerAgent', () => {
     };
 
     expect(result.type).toBe('synthesis_result');
-    expect(result.content).toContain('This guide explains modernization design patterns on AWS.');
-    expect(result.content).toContain('### **Anti-corruption layer pattern**');
-    expect(result.content).toContain('Isolates legacy systems from new ones via a translation layer.');
-    expect(result.content).toContain('### **Circuit breaker pattern**');
-    expect(result.content).toContain('Prevents cascading failures by stopping requests to failing services.');
+    expect(result.content).toContain('This guide explains how AWS design patterns help teams modernize systems');
+    expect(result.content).toContain('Patterns are presented as practical modernization tools rather than abstract theory.');
     expect(result.content).toContain('# **Cloud design patterns');
-    expect(result.content).toContain('## **Key Sections**');
-    expect(result.content).toContain('## **Notable Takeaways**');
+    expect(result.content).not.toContain('## **Key Sections**');
+    expect(result.content).not.toContain('## **Notable Takeaways**');
+    expect(result.content).not.toContain('### **');
     expect(result.content).not.toContain('"type":"scrape_result"');
     expect(result.content).not.toContain('"type":"reduce_result"');
   });

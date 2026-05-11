@@ -27,7 +27,7 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 ### Node Worker (Executor)
 - **Trigger:** Unclaimed `llm_inference` or `reduce` task on the Blackboard
 - **Claims** tasks via CRDT lock to prevent duplicate execution
-- **Runs:** WebLLM inference via WebGPU, RAG pipelines, embeddings. For scrape workflows, the `reduce` step cleans and structures extracted document text into a human-readable summary.
+- **Runs:** WebLLM inference via WebGPU, RAG pipelines, embeddings. For scrape workflows, the `reduce` step cleans extracted document text and produces a short narrative summary focused on the document's purpose, main ideas, and practical relevance.
 - **File:** `src/agents/worker/worker.ts`
 
 ### Bridge (MCP Tool Agent)
@@ -39,7 +39,7 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 
 ### Synthesizer (Reduce Agent)
 - **Trigger:** All tasks in a workflow marked `completed`
-- **Does:** Consolidates completed task outputs into a final structured workflow result on the Blackboard. Formats `reduce_result` fragments as readable markdown instead of raw JSON when they are present.
+- **Does:** Consolidates completed task outputs into a final structured workflow result on the Blackboard. Formats scrape `reduce_result` fragments as readable narrative markdown instead of raw JSON when they are present.
 - **Triggers:** HITL prompts if confidence scores are low
 - **File:** `src/agents/synthesizer/synthesizer.ts`
 
