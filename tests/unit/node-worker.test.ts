@@ -2,7 +2,7 @@ import * as Y from 'yjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRootDoc, createWorkflow, registerNode, getNodes } from '@core/blackboard/root-doc';
 import { NodeWorkerAgent } from '@agents/worker/worker';
-import type { GPUProfile, TaskNode } from '@core/blackboard/schema';
+import type { Edge, GPUProfile, TaskNode } from '@core/blackboard/schema';
 import {
   chatStream,
   getCurrentModel,
@@ -42,20 +42,18 @@ const selectedModel = {
   description: 'Balanced performance',
 };
 
+function createYMap(fields: Record<string, unknown>): Y.Map<unknown> {
+  const map = new Y.Map<unknown>();
+
+  for (const [key, value] of Object.entries(fields)) {
+    map.set(key, value);
+  }
+
+  return map;
+}
+
 function createTaskEntry(task: TaskNode): Y.Map<unknown> {
-  const node = new Y.Map<unknown>();
-  node.set('id', task.id);
-  node.set('type', task.type);
-  node.set('description', task.description);
-  node.set('status', task.status);
-  node.set('claimedBy', task.claimedBy);
-  node.set('args', task.args);
-  node.set('result', task.result);
-  node.set('error', task.error);
-  node.set('createdAt', task.createdAt);
-  node.set('startedAt', task.startedAt);
-  node.set('completedAt', task.completedAt);
-  return node;
+  return createYMap(task as unknown as Record<string, unknown>);
 }
 
 function createTask(overrides: Partial<TaskNode> & Pick<TaskNode, 'id' | 'type' | 'description'>): TaskNode {
@@ -85,23 +83,25 @@ function seedWorkflow(
   doc: Y.Doc,
   workflowId: string,
   tasks: TaskNode[],
-  edgesInput: Array<Record<string, unknown>> = [],
+  edgesInput: Edge[] = [],
 ): Y.Map<unknown> {
   const workflow = createWorkflow(doc, workflowId, 'worker-1', 'test prompt');
   const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
   const edges = workflow.get('edges') as Y.Array<unknown>;
 
-  for (const task of tasks) {
-    dagMap.set(task.id, createTaskEntry(task));
-  }
+  doc.transact(() => {
+    for (const task of tasks) {
+      dagMap.set(task.id, createTaskEntry(task));
+    }
 
-  for (const edge of edgesInput) {
-    edges.push([edge]);
-  }
+    for (const edge of edgesInput) {
+      edges.push([edge]);
+    }
 
-  workflow.set('taskCount', tasks.length);
-  workflow.set('completedCount', tasks.filter((task) => task.status === 'completed').length);
-  workflow.set('failedCount', tasks.filter((task) => task.status === 'failed').length);
+    workflow.set('taskCount', tasks.length);
+    workflow.set('completedCount', tasks.filter((task) => task.status === 'completed').length);
+    workflow.set('failedCount', tasks.filter((task) => task.status === 'failed').length);
+  });
 
   return workflow;
 }
@@ -149,6 +149,40 @@ function expectNoReaderNoise(value: string): void {
   expect(value).not.toContain('URL Source:');
   expect(value).not.toContain('Published Time:');
   expect(value).not.toContain('Markdown Content:');
+}
+
+function expectReduceResult(
+  result: Record<string, unknown>,
+  expectedSections: Array<{ heading: string; content: string }>,
+  expectedSummarySnippet?: string,
+): void {
+  expect(result.type).toBe('reduce_result');
+  expect(result.title).toBe('Example Article');
+  expect(result.summary).toBeTypeOf('string');
+
+  const summary = result.summary as string;
+  expect(summary.trim().length).toBeGreaterThan(0);
+  expect(summary).toBe(summary.trim());
+
+  if (expectedSummarySnippet) {
+    expect(summary).toContain(expectedSummarySnippet);
+  }
+
+  expectNoReaderNoise(result.title as string);
+  expectNoReaderNoise(summary);
+  expect(result.sections).toEqual(
+    expectedSections.map((section) =>
+      expect.objectContaining({
+        heading: section.heading,
+        content: expect.stringContaining(section.content),
+      }),
+    ),
+  );
+
+  for (const section of result.sections as Array<{ heading: string; content: string }>) {
+    expectNoReaderNoise(section.heading);
+    expectNoReaderNoise(section.content);
+  }
 }
 
 describe('NodeWorkerAgent WebLLM integration', () => {
@@ -287,13 +321,10 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     });
   });
 
-  it('returns a structured reduce_result when reducing scrape task output', async () => {
-    const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = seedAgentDoc(agent);
-
-    const reduceTask = seedReduceWorkflow(
-      doc,
-      [
+  it.each([
+    {
+      name: 'returns a structured reduce_result when reducing scrape task output',
+      scrapeContent: [
         '# Example Article',
         '',
         'Lead paragraph with concrete details that should produce a non-empty cleaned summary.',
@@ -304,38 +335,20 @@ describe('NodeWorkerAgent WebLLM integration', () => {
         '## Risks',
         'The second sourced fact belongs under the Risks section.',
       ].join('\n'),
-    );
-
-    const result = await (
-      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
-    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
-
-    expect(result.type).toBe('reduce_result');
-    expect(result.title).toBe('Example Article');
-    expect(result.summary).toBeTypeOf('string');
-    expect(result.summary.trim().length).toBeGreaterThan(0);
-    expect(result.summary).toBe(result.summary.trim());
-    expectNoReaderNoise(result.title);
-    expectNoReaderNoise(result.summary);
-    expect(result.sections).toEqual([
-      expect.objectContaining({
-        heading: 'Key Facts',
-        content: expect.stringContaining('The first sourced fact belongs under the Key Facts section.'),
-      }),
-      expect.objectContaining({
-        heading: 'Risks',
-        content: expect.stringContaining('The second sourced fact belongs under the Risks section.'),
-      }),
-    ]);
-  });
-
-  it('strips reader-noise markers from reduced scrape summaries', async () => {
-    const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = seedAgentDoc(agent);
-
-    const reduceTask = seedReduceWorkflow(
-      doc,
-      [
+      expectedSections: [
+        {
+          heading: 'Key Facts',
+          content: 'The first sourced fact belongs under the Key Facts section.',
+        },
+        {
+          heading: 'Risks',
+          content: 'The second sourced fact belongs under the Risks section.',
+        },
+      ],
+    },
+    {
+      name: 'strips reader-noise markers from reduced scrape summaries',
+      scrapeContent: [
         'URL Source: https://example.com/source',
         'Published Time: 2026-05-11T09:30:00Z',
         'Markdown Content:',
@@ -344,30 +357,19 @@ describe('NodeWorkerAgent WebLLM integration', () => {
         '## Details',
         'Concrete detail copied from the source section.',
       ].join('\n'),
-    );
+      expectedSections: [{ heading: 'Details', content: 'Concrete detail copied from the source section.' }],
+      expectedSummarySnippet: 'actual article content starts here',
+    },
+  ])('$name', async ({ scrapeContent, expectedSections, expectedSummarySnippet }) => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+    const reduceTask = seedReduceWorkflow(doc, scrapeContent);
 
     const result = await (
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(result.type).toBe('reduce_result');
-    expect(result.title).toBe('Example Article');
-    expect(result.summary).toBeTypeOf('string');
-    expect(result.summary.trim().length).toBeGreaterThan(0);
-    expect(result.summary).toBe(result.summary.trim());
-    expect(result.summary).toContain('actual article content starts here');
-    expectNoReaderNoise(result.title);
-    expectNoReaderNoise(result.summary);
-    expect(result.sections).toEqual([
-      expect.objectContaining({
-        heading: 'Details',
-        content: expect.stringContaining('Concrete detail copied from the source section.'),
-      }),
-    ]);
-    for (const section of result.sections as Array<{ heading: string; content: string }>) {
-      expectNoReaderNoise(section.heading);
-      expectNoReaderNoise(section.content);
-    }
+    expectReduceResult(result, expectedSections, expectedSummarySnippet);
   });
 
   it('persists task result into the DAG node on completion', () => {
