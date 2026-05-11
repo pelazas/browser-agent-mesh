@@ -57,6 +57,21 @@ interface PromptRequestUI {
   updatedAt?: number;
 }
 
+export interface TaskActivityEntry {
+  taskId: string;
+  description: string;
+  type: string;
+  status: string;
+  claimedBy: string | null;
+  error: string | null;
+  startedAt: number | null;
+  completedAt: number | null;
+  createdAt: number;
+  modelId: string | null;
+  tokensGenerated: number | null;
+  tokensPerSec: number | null;
+}
+
 export interface WorkflowCardView {
   workflowId: string;
   prompt: string;
@@ -69,6 +84,7 @@ export interface WorkflowCardView {
   responseText: string | null;
   isProcessing: boolean;
   createdAt: number;
+  tasks: TaskActivityEntry[];
 }
 
 interface PromptStatusView {
@@ -108,6 +124,33 @@ export function extractWorkflowResponse(workflow: WorkflowRecordUI): {
       : null;
 
   return { modelId, responseText };
+}
+
+export function extractTaskActivities(workflow: WorkflowRecordUI): TaskActivityEntry[] {
+  const dag = (workflow as Record<string, unknown>).dag as Record<string, Record<string, unknown>> | undefined;
+  if (!dag) return [];
+
+  return Object.entries(dag).map(([taskId, task]) => {
+    const result = task?.result as Record<string, unknown> | undefined;
+    const modelId = typeof result?.modelId === 'string' ? result.modelId : null;
+    const tokensGenerated = typeof result?.tokensGenerated === 'number' ? result.tokensGenerated : null;
+    const tokensPerSec = typeof result?.tokensPerSec === 'number' ? result.tokensPerSec : null;
+
+    return {
+      taskId,
+      description: typeof task?.description === 'string' ? task.description : '',
+      type: typeof task?.type === 'string' ? task.type : 'unknown',
+      status: typeof task?.status === 'string' ? task.status : 'pending',
+      claimedBy: typeof task?.claimedBy === 'string' ? task.claimedBy : null,
+      error: typeof task?.error === 'string' ? task.error : null,
+      startedAt: typeof task?.startedAt === 'number' ? task.startedAt : null,
+      completedAt: typeof task?.completedAt === 'number' ? task.completedAt : null,
+      createdAt: typeof task?.createdAt === 'number' ? task.createdAt : 0,
+      modelId,
+      tokensGenerated,
+      tokensPerSec,
+    };
+  });
 }
 
 export function useAppView({
@@ -167,6 +210,7 @@ export function useAppView({
         responseText,
         isProcessing: data.state === 'active',
         createdAt: data.createdAt ?? 0,
+        tasks: extractTaskActivities(data),
       });
     });
 
