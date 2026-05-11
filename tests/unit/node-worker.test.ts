@@ -58,12 +58,63 @@ function createTaskEntry(task: TaskNode): Y.Map<unknown> {
   return node;
 }
 
+function createTask(overrides: Partial<TaskNode> & Pick<TaskNode, 'id' | 'type' | 'description'>): TaskNode {
+  return {
+    id: overrides.id,
+    type: overrides.type,
+    description: overrides.description,
+    status: overrides.status ?? 'pending',
+    claimedBy: overrides.claimedBy ?? null,
+    args: overrides.args ?? {},
+    result: overrides.result ?? null,
+    error: overrides.error ?? null,
+    createdAt: overrides.createdAt ?? Date.now(),
+    startedAt: overrides.startedAt ?? null,
+    completedAt: overrides.completedAt ?? null,
+  };
+}
+
+function getReduceUserFacingText(result: Record<string, unknown>): string[] {
+  const sections = Array.isArray(result.sections) ? result.sections : [];
+  const takeaways = Array.isArray(result.takeaways) ? result.takeaways : [];
+
+  const sectionText = sections.flatMap((section) => {
+    if (typeof section === 'string') {
+      return [section];
+    }
+    if (section && typeof section === 'object') {
+      const record = section as Record<string, unknown>;
+      return [record.heading, record.title, record.content, record.summary].filter(
+        (value): value is string => typeof value === 'string',
+      );
+    }
+    return [];
+  });
+
+  const takeawayText = takeaways.flatMap((takeaway) => {
+    if (typeof takeaway === 'string') {
+      return [takeaway];
+    }
+    if (takeaway && typeof takeaway === 'object') {
+      return Object.values(takeaway as Record<string, unknown>).filter(
+        (value): value is string => typeof value === 'string',
+      );
+    }
+    return [];
+  });
+
+  return [result.title, result.summary, ...sectionText, ...takeawayText].filter(
+    (value): value is string => typeof value === 'string',
+  );
+}
+
 function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
   const workflow = createWorkflow(doc, 'wf-reduce', 'worker-1', 'test prompt');
   const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
   const edges = workflow.get('edges') as Y.Array<unknown>;
+  const now = Date.now();
 
-  const scrapeTask: TaskNode = {
+  const scrapeTask = createTask({
     id: 'scrape-1',
     type: 'scrape',
     description: 'Scrape example source',
@@ -79,28 +130,22 @@ function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
       bytes: scrapeContent.length,
       selector: null,
     },
-    error: null,
-    createdAt: Date.now(),
-    startedAt: Date.now(),
-    completedAt: Date.now(),
-  };
+    createdAt: now,
+    startedAt: now,
+    completedAt: now,
+  });
 
-  const reduceTask: TaskNode = {
+  const reduceTask = createTask({
     id: 'reduce-1',
     type: 'reduce',
     description: 'Summarize the scraped source',
-    status: 'pending',
-    claimedBy: null,
     args: { prompt: 'Summarize the scraped source' },
-    result: null,
-    error: null,
-    createdAt: Date.now(),
-    startedAt: null,
-    completedAt: null,
-  };
+    createdAt: now,
+  });
 
-  dagMap.set(scrapeTask.id, createTaskEntry(scrapeTask));
-  dagMap.set(reduceTask.id, createTaskEntry(reduceTask));
+  for (const task of [scrapeTask, reduceTask]) {
+    dagMap.set(task.id, createTaskEntry(task));
+  }
   edges.push([{ id: 'edge-scrape-reduce', source: scrapeTask.id, target: reduceTask.id, type: 'sequential' }]);
   workflow.set('taskCount', 2);
   workflow.set('completedCount', 1);
@@ -276,14 +321,21 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(result).toMatchObject({
-      type: 'reduce_result',
-      title: expect.any(String),
-      summary: expect.any(String),
-      sections: expect.any(Array),
-      takeaways: expect.any(Array),
-      confidence: expect.any(Number),
-    });
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toEqual(expect.stringContaining('Example Article'));
+    expect(result.summary).toEqual(expect.stringContaining('long source article'));
+    expect(result.summary).toEqual(expect.stringContaining('concrete points'));
+    expect(result.takeaways).toEqual(
+      expect.arrayContaining([expect.stringContaining('concrete points')]),
+    );
+    expect(result.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          heading: expect.stringContaining('Example Article'),
+        }),
+      ]),
+    );
+    expect(result.confidence).toEqual(expect.any(Number));
   });
 
   it('strips reader-noise markers from reduced scrape summaries', async () => {
@@ -307,15 +359,14 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(result).toMatchObject({
-      type: 'reduce_result',
-      summary: expect.any(String),
-      sections: expect.any(Array),
-      takeaways: expect.any(Array),
-    });
-    expect(JSON.stringify(result)).not.toContain('URL Source:');
-    expect(JSON.stringify(result)).not.toContain('Markdown Content:');
-    expect(JSON.stringify(result)).not.toContain('Published Time:');
+    expect(result.type).toBe('reduce_result');
+    const userFacingText = getReduceUserFacingText(result).join('\n');
+
+    expect(userFacingText).toContain('Example Article');
+    expect(userFacingText).toContain('actual article content starts here');
+    expect(userFacingText).not.toContain('URL Source:');
+    expect(userFacingText).not.toContain('Markdown Content:');
+    expect(userFacingText).not.toContain('Published Time:');
   });
 
   it('persists task result into the DAG node on completion', () => {
