@@ -175,8 +175,50 @@ export class NodeWorkerAgent extends BaseAgent {
     }
 
     if (task.type === 'reduce') {
-      // Collect results from predecessor tasks
-      return { type: 'reduce_result', output: `Reduced: ${task.description}` };
+      if (!workflowId) {
+        throw new Error('Reduce task requires workflowId');
+      }
+
+      const predecessorResults = this.getCompletedPredecessorResults(workflowId, task.id);
+
+      let scrapeContent: string | null = null;
+      for (const result of predecessorResults) {
+        if (
+          typeof result === 'object' &&
+          result !== null &&
+          (result as Record<string, unknown>).type === 'scrape_result'
+        ) {
+          const content = (result as Record<string, unknown>).content;
+          if (typeof content === 'string' && content.trim().length > 0) {
+            scrapeContent = content;
+            break;
+          }
+        }
+      }
+
+      if (!scrapeContent) {
+        throw new Error('No usable scrape content found for reduce task');
+      }
+
+      const cleanedText = this.cleanExtractedDocumentText(scrapeContent);
+      if (!cleanedText.trim()) {
+        throw new Error('No usable scrape content found for reduce task');
+      }
+
+      const title = this.deriveDocumentTitle(cleanedText);
+      const sections = this.deriveSectionHeadings(cleanedText);
+      const summary = this.buildOverview(cleanedText);
+      const takeaways = this.deriveTakeaways(cleanedText, sections);
+
+      return {
+        type: 'reduce_result',
+        sourceType: 'scrape',
+        title: title ?? 'Untitled',
+        summary,
+        sections,
+        takeaways,
+        confidence: 0.8,
+      };
     }
 
     throw new Error(`Unsupported task type for worker: ${task.type}`);
@@ -222,5 +264,131 @@ export class NodeWorkerAgent extends BaseAgent {
 
   private updateWorkflowPreview(workflowId: string, result: unknown): void {
     updateWorkflowPreviewResult(this.doc, workflowId, result);
+  }
+
+  private getWorkflowNodeMap(workflowId: string): Y.Map<Y.Map<unknown>> {
+    const workflows = getActiveWorkflows(this.doc);
+    const workflow = workflows.get(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow not found: ${workflowId}`);
+    }
+    return workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+  }
+
+  private getCompletedPredecessorResults(workflowId: string, taskId: string): unknown[] {
+    const workflows = getActiveWorkflows(this.doc);
+    const workflow = workflows.get(workflowId);
+    if (!workflow) return [];
+
+    const edges = workflow.get('edges') as Y.Array<unknown>;
+    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+
+    const predecessorIds: string[] = [];
+    for (const edge of edges.toJSON() as Array<{ source: string; target: string }>) {
+      if (edge.target === taskId) {
+        predecessorIds.push(edge.source);
+      }
+    }
+
+    const results: unknown[] = [];
+    for (const predId of predecessorIds) {
+      const predNode = dagMap.get(predId);
+      if (predNode && predNode.get('status') === 'completed' && predNode.get('result') !== null) {
+        results.push(predNode.get('result'));
+      }
+    }
+
+    return results;
+  }
+
+  private cleanExtractedDocumentText(raw: string): string {
+    const lines = raw.split('\n');
+    const cleaned: string[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (
+        trimmed.startsWith('URL Source:') ||
+        trimmed.startsWith('Published Time:') ||
+        trimmed.startsWith('Markdown Content:')
+      ) {
+        continue;
+      }
+      cleaned.push(line);
+    }
+    return cleaned.join('\n').trim();
+  }
+
+  private deriveDocumentTitle(text: string): string | null {
+    const match = text.match(/^#\s+(.+)$/m);
+    return match ? match[1].trim() : null;
+  }
+
+  private deriveSectionHeadings(text: string): Array<{ heading: string; content: string }> {
+    const sections: Array<{ heading: string; content: string }> = [];
+    const lines = text.split('\n');
+    let currentHeading = '';
+    let currentContent: string[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith('# ')) {
+        if (currentHeading || currentContent.length > 0) {
+          sections.push({
+            heading: currentHeading,
+            content: currentContent.join('\n').trim(),
+          });
+        }
+        currentHeading = line.replace(/^#\s+/, '').trim();
+        currentContent = [];
+      } else if (line.startsWith('## ')) {
+        if (currentHeading || currentContent.length > 0) {
+          sections.push({
+            heading: currentHeading,
+            content: currentContent.join('\n').trim(),
+          });
+        }
+        currentHeading = line.replace(/^##\s+/, '').trim();
+        currentContent = [];
+      } else {
+        currentContent.push(line);
+      }
+    }
+
+    if (currentHeading || currentContent.length > 0) {
+      sections.push({
+        heading: currentHeading,
+        content: currentContent.join('\n').trim(),
+      });
+    }
+
+    return sections;
+  }
+
+  private buildOverview(text: string): string {
+    const paragraphs = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith('#'));
+
+    return paragraphs.slice(0, 2).join(' ').trim();
+  }
+
+  private deriveTakeaways(
+    _text: string,
+    sections: Array<{ heading: string; content: string }>,
+  ): string[] {
+    const takeaways: string[] = [];
+    for (const section of sections) {
+      if (section.heading) {
+        takeaways.push(section.heading);
+      }
+      const sentences = section.content
+        .split('.')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 10);
+      if (sentences.length > 0) {
+        takeaways.push(sentences[0] + '.');
+      }
+    }
+    return takeaways.slice(0, 5);
   }
 }
