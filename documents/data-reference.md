@@ -210,6 +210,36 @@ interface LlmResultFragment {
 
 The UI should prefer `WorkflowPreviewResult.output`/`modelId` while a workflow is still active, then switch to `WorkflowResult.fragments[*].content.output` and `modelId` once synthesis completes, falling back to `WorkflowResult.content` only when no LLM fragment is available.
 
+Common fragment payload written by bridge workers for scrape tasks:
+
+```ts
+interface ScrapeResultFragment {
+  type: 'scrape_result';
+  url: string;
+  contentType: string;
+  format: 'html' | 'text';
+  content: string;
+  bytes: number;
+  selector: string | null;
+}
+```
+
+HTML scrapes return `format: 'html'` and preserve the raw HTML fragment in `content`. PDF/document fallback scrapes return `format: 'text'` and store extracted plain text in `content`. CSS selectors are only supported for HTML scrapes.
+
+Common fragment payload written by the synthesizer for reduced scrape results:
+
+```ts
+interface ReduceResultFragment {
+  type: 'reduce_result';
+  sourceType: 'scrape';
+  title: string | null;
+  summary: string;
+  sections: string[];
+  takeaways: string[];
+  confidence: number;
+}
+```
+
 ### PromptRequestEntry
 ```ts
 interface PromptRequestEntry {
