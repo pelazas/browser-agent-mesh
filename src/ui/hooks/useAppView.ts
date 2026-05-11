@@ -35,6 +35,10 @@ interface WorkflowFragment {
 interface WorkflowResultUI {
   type?: string;
   content?: string;
+  output?: string;
+  modelId?: string;
+  tokensGenerated?: number;
+  tokensPerSec?: number;
   fragments?: WorkflowFragment[];
 }
 
@@ -110,6 +114,17 @@ export function extractWorkflowResponse(workflow: WorkflowRecordUI): {
   modelId: string | null;
   responseText: string | null;
 } {
+  const directModelId = typeof workflow.result?.modelId === 'string'
+    ? workflow.result.modelId
+    : null;
+  const directOutput = typeof workflow.result?.output === 'string' && workflow.result.output.trim().length > 0
+    ? workflow.result.output
+    : null;
+
+  if (directOutput !== null || directModelId !== null) {
+    return { modelId: directModelId, responseText: directOutput };
+  }
+
   const fragments = Array.isArray(workflow.result?.fragments) ? workflow.result?.fragments : [];
   const llmFragment = fragments.find((fragment) => fragment.content?.type === 'llm_result');
 

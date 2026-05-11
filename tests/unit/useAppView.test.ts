@@ -42,4 +42,36 @@ describe('extractWorkflowResponse', () => {
       responseText: 'Synthesized workflow summary',
     });
   });
+
+  it('prefers partial workflow output while inference is still streaming', () => {
+    const workflow = {
+      result: {
+        type: 'llm_result_partial',
+        output: 'Streaming answer so far',
+        modelId: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+      },
+    };
+
+    expect(extractWorkflowResponse(workflow)).toEqual({
+      modelId: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+      responseText: 'Streaming answer so far',
+    });
+  });
+
+  it('prefers partial workflow output over synthesized fallback while active', () => {
+    const workflow = {
+      result: {
+        type: 'llm_result_partial',
+        output: 'Partial token stream',
+        modelId: 'SmolLM-135M',
+        content: 'Old synthesized fallback',
+        fragments: [],
+      },
+    };
+
+    expect(extractWorkflowResponse(workflow)).toEqual({
+      modelId: 'SmolLM-135M',
+      responseText: 'Partial token stream',
+    });
+  });
 });
