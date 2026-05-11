@@ -315,12 +315,12 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect((result.title as string).trim().length).toBeGreaterThan(0);
     expect(result.description).toBeTypeOf('string');
     expect((result.description as string).trim().length).toBeGreaterThan(0);
-    expect(Array.isArray(result.sections)).toBe(true);
-    expect((result.sections as unknown[]).length).toBeGreaterThan(0);
+    expect(Array.isArray(result.sectionSummaries)).toBe(true);
+    expect((result.sectionSummaries as unknown[]).length).toBeGreaterThan(0);
 
-    for (const heading of result.sections as string[]) {
-      expect(heading).toBeTypeOf('string');
-      expectNoReaderNoise(heading);
+    for (const item of result.sectionSummaries as Array<{ name: string; summary: string }>) {
+      expect(item.name).toBeTypeOf('string');
+      expectNoReaderNoise(item.name);
     }
 
     expectNoReaderNoise(result.title as string);
@@ -357,9 +357,9 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expectNoReaderNoise(result.title as string);
     expectNoReaderNoise(result.description as string);
 
-    expect(Array.isArray(result.sections)).toBe(true);
-    for (const heading of result.sections as string[]) {
-      expectNoReaderNoise(heading);
+    expect(Array.isArray(result.sectionSummaries)).toBe(true);
+    for (const item of result.sectionSummaries as Array<{ name: string; summary: string }>) {
+      expectNoReaderNoise(item.name);
     }
   });
 
@@ -403,7 +403,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     mockedGetEngineStatus.mockReturnValue('ready');
     mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
     mockedChatStream.mockResolvedValue({
-      message: { role: 'assistant', content: '{"title":"AWS Cloud Patterns","description":"Guide to AWS design patterns.","sections":["Anti-corruption","Circuit breaker"],"takeaways":["Use patterns for reliability."]}' },
+      message: { role: 'assistant', content: '{"title":"AWS Cloud Patterns","description":"Guide to AWS design patterns.","sectionSummaries":[{"name":"Anti-corruption","summary":"Isolates legacy systems via translation layer."},{"name":"Circuit breaker","summary":"Prevents cascading failures in distributed systems."}],"takeaways":["Use patterns for reliability."]}' },
       tokensGenerated: 50,
       tokensPerSec: 25,
     });
@@ -431,7 +431,10 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBe('AWS Cloud Patterns');
     expect(result.description).toBe('Guide to AWS design patterns.');
-    expect(result.sections).toEqual(['Anti-corruption', 'Circuit breaker']);
+    expect(result.sectionSummaries).toEqual([
+      { name: 'Anti-corruption', summary: 'Isolates legacy systems via translation layer.' },
+      { name: 'Circuit breaker', summary: 'Prevents cascading failures in distributed systems.' },
+    ]);
     expect(result.takeaways).toEqual(['Use patterns for reliability.']);
   });
 

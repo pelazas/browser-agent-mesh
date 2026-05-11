@@ -578,6 +578,47 @@ body {
   white-space: pre-wrap;
 }
 
+.markdown-renderer h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.markdown-renderer h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: var(--text-primary);
+}
+
+.markdown-renderer h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 12px 0 4px;
+  color: var(--text-primary);
+}
+
+.markdown-renderer p {
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+
+.markdown-renderer ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+.markdown-renderer li {
+  margin: 4px 0;
+  color: var(--text-secondary);
+}
+
+.markdown-renderer strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .workflow-view__placeholder {
   background: var(--bg-secondary);
   border: 1px dashed var(--border);

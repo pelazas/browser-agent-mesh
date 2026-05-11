@@ -213,23 +213,23 @@ export class NodeWorkerAgent extends BaseAgent {
           sourceType: 'scrape_result',
           title: llmSummary.title,
           description: llmSummary.description,
-          sections: llmSummary.sections,
+          sectionSummaries: llmSummary.sectionSummaries,
           takeaways: llmSummary.takeaways,
           confidence: DEFAULT_REDUCE_CONFIDENCE,
         };
       }
 
       const title = this.deriveDocumentTitle(cleanedText);
-      const sections = this.deriveSectionHeadings(cleanedText);
+      const sectionSummaries = this.deriveSectionHeadings(cleanedText).map((name) => ({ name, summary: '' }));
       const description = this.buildOverview(cleanedText);
-      const takeaways = this.deriveTakeaways(sections);
+      const takeaways = this.deriveTakeaways(sectionSummaries);
 
       return {
         type: 'reduce_result',
         sourceType: 'scrape_result',
         title,
         description,
-        sections,
+        sectionSummaries,
         takeaways,
         confidence: DEFAULT_REDUCE_CONFIDENCE,
       };
@@ -353,17 +353,17 @@ export class NodeWorkerAgent extends BaseAgent {
     return nonHeadingLines.slice(0, 3).join(' ').trim();
   }
 
-  private deriveTakeaways(sections: string[]): string[] {
-    const takeaways = sections
-      .filter((heading) => heading.length > 0)
-      .map((heading) => `Covers ${heading}.`);
+  private deriveTakeaways(sectionSummaries: Array<{ name: string }>): string[] {
+    const takeaways = sectionSummaries
+      .filter((item) => item.name.length > 0)
+      .map((item) => `Covers ${item.name}.`);
     return takeaways.slice(0, 5);
   }
 
   private async summarizeWithLlm(text: string): Promise<{
     title: string | null;
     description: string;
-    sections: string[];
+    sectionSummaries: Array<{ name: string; summary: string }>;
     takeaways: string[];
   } | null> {
     try {
@@ -383,10 +383,11 @@ export class NodeWorkerAgent extends BaseAgent {
         'You are a document summarizer. Read the text below and return ONLY a JSON object',
         'with this exact shape (no markdown code blocks, no extra text):',
         '',
-        '{"title":"...","description":"1 paragraph explaining what this document says","sections":["Key topic 1",...],"takeaways":["Notable insight 1",...]}',
+        '{"title":"...","description":"1-2 paragraphs explaining what this document says","sectionSummaries":[{"name":"Section title","summary":"1-2 sentences explaining what this section covers and why it matters"},...],"takeaways":["Notable insight as a full sentence",...]}',
         '',
-        'The description should be a single paragraph that clearly explains what the document is about and what it covers.',
-        'Keep sections and takeaways concise. Limit sections to 6 items and takeaways to 5 items.',
+        'The description should clearly explain what the document is about and what it covers.',
+        'Each section summary must explain the section content, not just repeat the title.',
+        'Limit sectionSummaries to 6 items and takeaways to 5 items.',
         '',
         'Document text:',
         '---',
@@ -405,7 +406,7 @@ export class NodeWorkerAgent extends BaseAgent {
       if (parsed) {
         this.log.info('LLM summarization succeeded', {
           title: parsed.title,
-          sectionCount: parsed.sections.length,
+          sectionCount: parsed.sectionSummaries.length,
           takeawayCount: parsed.takeaways.length,
         });
         return parsed;
@@ -422,7 +423,7 @@ export class NodeWorkerAgent extends BaseAgent {
   private tryParseSummaryJson(raw: string): {
     title: string | null;
     description: string;
-    sections: string[];
+    sectionSummaries: Array<{ name: string; summary: string }>;
     takeaways: string[];
   } | null {
     try {
@@ -432,14 +433,22 @@ export class NodeWorkerAgent extends BaseAgent {
 
       const title = typeof parsed.title === 'string' ? parsed.title : null;
       const description = typeof parsed.description === 'string' ? parsed.description : '';
-      const sections = Array.isArray(parsed.sections)
-        ? parsed.sections.filter((s): s is string => typeof s === 'string')
+
+      const sectionSummaries = Array.isArray(parsed.sectionSummaries)
+        ? parsed.sectionSummaries
+            .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+            .map((item) => ({
+              name: typeof item.name === 'string' ? item.name : '',
+              summary: typeof item.summary === 'string' ? item.summary : '',
+            }))
+            .filter((item) => item.name.length > 0 && item.summary.length > 0)
         : [];
+
       const takeaways = Array.isArray(parsed.takeaways)
         ? parsed.takeaways.filter((s): s is string => typeof s === 'string')
         : [];
 
-      return { title, description, sections, takeaways };
+      return { title, description, sectionSummaries, takeaways };
     } catch {
       return null;
     }

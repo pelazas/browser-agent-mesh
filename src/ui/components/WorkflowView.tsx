@@ -1,5 +1,6 @@
 import React from 'react';
 import { KeywordText } from '@ui/components/KeywordText';
+import { MarkdownRenderer } from '@ui/components/MarkdownRenderer';
 import { useWorkflowView, type ActivityViewEntry } from '@ui/components/useWorkflowView';
 import type { WorkflowCardView } from '@ui/hooks/useAppView';
 
@@ -125,7 +126,11 @@ export const WorkflowView: React.FC<WorkflowViewProps> = (props) => {
         </div>
       )}
       {modelLabel && <div className="workflow-view__meta">Model: {modelLabel}</div>}
-      {hasResponse && <div className="workflow-view__response">{responseText}</div>}
+      {hasResponse && (
+        <div className="workflow-view__response">
+          <MarkdownRenderer text={responseText ?? ''} />
+        </div>
+      )}
       {!hasResponse && state === 'active' && !showActivityLog && (
         <div className="workflow-view__placeholder">Waiting for response fragments...</div>
       )}

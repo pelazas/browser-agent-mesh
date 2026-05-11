@@ -8,6 +8,11 @@ export interface FragmentOutput {
   confidence: number;
 }
 
+interface SectionSummary {
+  name: string;
+  summary: string;
+}
+
 function formatReduceResult(content: unknown): string | null {
   if (
     typeof content === 'object' &&
@@ -17,6 +22,7 @@ function formatReduceResult(content: unknown): string | null {
     const r = content as {
       title?: string;
       description?: string;
+      sectionSummaries?: SectionSummary[];
       sections?: string[];
       takeaways?: string[];
     };
@@ -28,12 +34,19 @@ function formatReduceResult(content: unknown): string | null {
     if (r.description) {
       parts.push(r.description);
     }
-    if (r.sections && r.sections.length > 0) {
+
+    const sectionSummaries = r.sectionSummaries ?? r.sections?.map((name) => ({ name, summary: '' }));
+    if (sectionSummaries && sectionSummaries.length > 0) {
       parts.push('## **Key Sections**');
-      for (const section of r.sections) {
-        parts.push(`- **${section}**`);
+      for (const section of sectionSummaries) {
+        if (section.summary) {
+          parts.push(`### **${section.name}**\n\n${section.summary}`);
+        } else {
+          parts.push(`- **${section.name}**`);
+        }
       }
     }
+
     if (r.takeaways && r.takeaways.length > 0) {
       parts.push('## **Notable Takeaways**');
       for (const takeaway of r.takeaways) {

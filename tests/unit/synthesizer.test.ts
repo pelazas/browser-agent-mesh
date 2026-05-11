@@ -137,8 +137,11 @@ describe('SynthesizerAgent', () => {
           sourceType: 'scrape_result',
           title: 'Cloud design patterns, architectures, and implementations',
           description: 'This guide explains modernization design patterns on AWS.',
-          sections: ['Anti-corruption layer pattern', 'Circuit breaker pattern'],
-          takeaways: ['Covers Anti-corruption layer pattern.', 'Covers Circuit breaker pattern.'],
+          sectionSummaries: [
+            { name: 'Anti-corruption layer pattern', summary: 'Isolates legacy systems from new ones via a translation layer.' },
+            { name: 'Circuit breaker pattern', summary: 'Prevents cascading failures by stopping requests to failing services.' },
+          ],
+          takeaways: ['The anti-corruption layer is essential when modernizing legacy systems.', 'Circuit breakers should be combined with retry logic for resilience.'],
           confidence: 0.85,
         },
       },
@@ -163,8 +166,10 @@ describe('SynthesizerAgent', () => {
 
     expect(result.type).toBe('synthesis_result');
     expect(result.content).toContain('This guide explains modernization design patterns on AWS.');
-    expect(result.content).toContain('**Anti-corruption layer pattern**');
-    expect(result.content).toContain('Covers Anti-corruption layer pattern.');
+    expect(result.content).toContain('### **Anti-corruption layer pattern**');
+    expect(result.content).toContain('Isolates legacy systems from new ones via a translation layer.');
+    expect(result.content).toContain('### **Circuit breaker pattern**');
+    expect(result.content).toContain('Prevents cascading failures by stopping requests to failing services.');
     expect(result.content).toContain('# **Cloud design patterns');
     expect(result.content).toContain('## **Key Sections**');
     expect(result.content).toContain('## **Notable Takeaways**');
