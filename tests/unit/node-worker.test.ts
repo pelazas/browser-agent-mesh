@@ -74,10 +74,39 @@ function createTask(overrides: Partial<TaskNode> & Pick<TaskNode, 'id' | 'type' 
   };
 }
 
-function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
-  const workflow = createWorkflow(doc, 'wf-reduce', 'worker-1', 'test prompt');
+function seedAgentDoc(agent: NodeWorkerAgent): Y.Doc {
+  const doc = (agent as unknown as { doc: Y.Doc }).doc;
+  const seededDoc = createRootDoc();
+  Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
+  return doc;
+}
+
+function seedWorkflow(
+  doc: Y.Doc,
+  workflowId: string,
+  tasks: TaskNode[],
+  edgesInput: Array<Record<string, unknown>> = [],
+): Y.Map<unknown> {
+  const workflow = createWorkflow(doc, workflowId, 'worker-1', 'test prompt');
   const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
   const edges = workflow.get('edges') as Y.Array<unknown>;
+
+  for (const task of tasks) {
+    dagMap.set(task.id, createTaskEntry(task));
+  }
+
+  for (const edge of edgesInput) {
+    edges.push([edge]);
+  }
+
+  workflow.set('taskCount', tasks.length);
+  workflow.set('completedCount', tasks.filter((task) => task.status === 'completed').length);
+  workflow.set('failedCount', tasks.filter((task) => task.status === 'failed').length);
+
+  return workflow;
+}
+
+function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
   const now = Date.now();
 
   const scrapeTask = createTask({
@@ -109,14 +138,17 @@ function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
     createdAt: now,
   });
 
-  for (const task of [scrapeTask, reduceTask]) {
-    dagMap.set(task.id, createTaskEntry(task));
-  }
-  edges.push([{ id: 'edge-scrape-reduce', source: scrapeTask.id, target: reduceTask.id, type: 'sequential' }]);
-  workflow.set('taskCount', 2);
-  workflow.set('completedCount', 1);
+  seedWorkflow(doc, 'wf-reduce', [scrapeTask, reduceTask], [
+    { id: 'edge-scrape-reduce', source: scrapeTask.id, target: reduceTask.id, type: 'sequential' },
+  ]);
 
   return reduceTask;
+}
+
+function expectNoReaderNoise(value: string): void {
+  expect(value).not.toContain('URL Source:');
+  expect(value).not.toContain('Published Time:');
+  expect(value).not.toContain('Markdown Content:');
 }
 
 describe('NodeWorkerAgent WebLLM integration', () => {
@@ -227,11 +259,6 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     });
 
     const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = (agent as unknown as { doc: Y.Doc }).doc;
-    const seededDoc = createRootDoc();
-    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
-    const workflow = createWorkflow(doc, 'wf-stream', 'worker-1', 'test prompt');
-
     const task: TaskNode = {
       id: 'task-stream',
       type: 'llm_inference',
@@ -245,20 +272,8 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       startedAt: Date.now(),
       completedAt: null,
     };
-    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-    const node = new Y.Map<unknown>();
-    node.set('id', task.id);
-    node.set('type', task.type);
-    node.set('description', task.description);
-    node.set('status', task.status);
-    node.set('claimedBy', task.claimedBy);
-    node.set('args', task.args);
-    node.set('result', task.result);
-    node.set('error', task.error);
-    node.set('createdAt', task.createdAt);
-    node.set('startedAt', task.startedAt);
-    node.set('completedAt', task.completedAt);
-    dagMap.set(task.id, node);
+    const doc = seedAgentDoc(agent);
+    const workflow = seedWorkflow(doc, 'wf-stream', [task]);
 
     await (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(task, 'wf-stream');
 
@@ -274,35 +289,49 @@ describe('NodeWorkerAgent WebLLM integration', () => {
 
   it('returns a structured reduce_result when reducing scrape task output', async () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = (agent as unknown as { doc: Y.Doc }).doc;
-    const seededDoc = createRootDoc();
-    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
+    const doc = seedAgentDoc(agent);
 
     const reduceTask = seedReduceWorkflow(
       doc,
-      'Example Article\n\nThis is a long source article with several concrete points to summarize.',
+      [
+        '# Example Article',
+        '',
+        'Lead paragraph with concrete details that should produce a non-empty cleaned summary.',
+        '',
+        '## Key Facts',
+        'The first sourced fact belongs under the Key Facts section.',
+        '',
+        '## Risks',
+        'The second sourced fact belongs under the Risks section.',
+      ].join('\n'),
     );
 
     const result = await (
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(result).toMatchObject({
-      type: 'reduce_result',
-      title: expect.any(String),
-      summary: expect.any(String),
-      sections: expect.any(Array),
-      takeaways: expect.any(Array),
-      confidence: expect.any(Number),
-    });
-    expect(result.title).toContain('Example Article');
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toBe('Example Article');
+    expect(result.summary).toBeTypeOf('string');
+    expect(result.summary.trim().length).toBeGreaterThan(0);
+    expect(result.summary).toBe(result.summary.trim());
+    expectNoReaderNoise(result.title);
+    expectNoReaderNoise(result.summary);
+    expect(result.sections).toEqual([
+      expect.objectContaining({
+        heading: 'Key Facts',
+        content: expect.stringContaining('The first sourced fact belongs under the Key Facts section.'),
+      }),
+      expect.objectContaining({
+        heading: 'Risks',
+        content: expect.stringContaining('The second sourced fact belongs under the Risks section.'),
+      }),
+    ]);
   });
 
   it('strips reader-noise markers from reduced scrape summaries', async () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = (agent as unknown as { doc: Y.Doc }).doc;
-    const seededDoc = createRootDoc();
-    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
+    const doc = seedAgentDoc(agent);
 
     const reduceTask = seedReduceWorkflow(
       doc,
@@ -312,6 +341,8 @@ describe('NodeWorkerAgent WebLLM integration', () => {
         'Markdown Content:',
         '# Example Article',
         'The actual article content starts here and should be summarized cleanly.',
+        '## Details',
+        'Concrete detail copied from the source section.',
       ].join('\n'),
     );
 
@@ -319,51 +350,40 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expect(result).toMatchObject({
-      type: 'reduce_result',
-      title: expect.any(String),
-      summary: expect.any(String),
-      sections: expect.any(Array),
-    });
-
-    expect(result.title).toContain('Example Article');
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toBe('Example Article');
+    expect(result.summary).toBeTypeOf('string');
+    expect(result.summary.trim().length).toBeGreaterThan(0);
+    expect(result.summary).toBe(result.summary.trim());
     expect(result.summary).toContain('actual article content starts here');
-    expect(result.title).not.toContain('URL Source:');
-    expect(result.title).not.toContain('Published Time:');
-    expect(result.summary).not.toContain('Markdown Content:');
-    expect(result.summary).not.toContain('URL Source:');
-    expect(result.summary).not.toContain('Published Time:');
-
-    expect(result.sections).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          heading: expect.any(String),
-          content: expect.stringContaining('actual article content starts here'),
-        }),
-      ]),
-    );
+    expectNoReaderNoise(result.title);
+    expectNoReaderNoise(result.summary);
+    expect(result.sections).toEqual([
+      expect.objectContaining({
+        heading: 'Details',
+        content: expect.stringContaining('Concrete detail copied from the source section.'),
+      }),
+    ]);
+    for (const section of result.sections as Array<{ heading: string; content: string }>) {
+      expectNoReaderNoise(section.heading);
+      expectNoReaderNoise(section.content);
+    }
   });
 
   it('persists task result into the DAG node on completion', () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = (agent as unknown as { doc: Y.Doc }).doc;
-    const seededDoc = createRootDoc();
-    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
-    const workflow = createWorkflow(doc, 'wf-1', 'worker-1', 'test prompt');
+    const doc = seedAgentDoc(agent);
+    const runningTask = createTask({
+      id: 'task-1',
+      type: 'llm_inference',
+      description: 'test',
+      status: 'running',
+      claimedBy: 'worker-1',
+      startedAt: Date.now(),
+    });
+    const workflow = seedWorkflow(doc, 'wf-1', [runningTask]);
     const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
-    const node = new Y.Map<unknown>();
-    node.set('id', 'task-1');
-    node.set('type', 'llm_inference');
-    node.set('description', 'test');
-    node.set('status', 'running');
-    node.set('claimedBy', 'worker-1');
-    node.set('args', {});
-    node.set('result', null);
-    node.set('error', null);
-    node.set('createdAt', Date.now());
-    node.set('startedAt', Date.now());
-    node.set('completedAt', null);
-    dagMap.set('task-1', node);
+    const node = dagMap.get('task-1') as Y.Map<unknown>;
 
     const result = { type: 'llm_result', output: 'stored output' };
     (agent as unknown as { completeTask: (workflowId: string, taskId: string, result: unknown) => void }).completeTask('wf-1', 'task-1', result);
