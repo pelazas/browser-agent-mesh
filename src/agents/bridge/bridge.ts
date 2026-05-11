@@ -97,7 +97,7 @@ export class BridgeAgent extends BaseAgent {
       selector: input.selector ?? null,
     });
 
-    const html = await scrape({
+    const result = await scrape({
       url: input.url,
       selector: input.selector,
       timeout: input.timeout,
@@ -106,9 +106,10 @@ export class BridgeAgent extends BaseAgent {
     return {
       type: 'scrape_result',
       url: input.url,
-      contentType: 'text/html',
-      html,
-      bytes: html.length,
+      contentType: result.contentType,
+      format: result.format,
+      content: result.content,
+      bytes: result.content.length,
       selector: input.selector ?? null,
     };
   }

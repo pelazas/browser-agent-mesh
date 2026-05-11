@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const DOCUMENT_FALLBACK_URL = 'https://r.jina.ai/http://docs.aws.amazon.com/some.pdf';
+
 interface MockElement {
   outerHTML: string;
 }
@@ -60,7 +62,11 @@ describe('bridge scraper', () => {
 
     const result = await scrape({ url: 'https://example.com' });
 
-    expect(result).toBe('<html><body><h1>Hi</h1></body></html>');
+    expect(result).toEqual({
+      contentType: 'text/html',
+      content: '<html><body><h1>Hi</h1></body></html>',
+      format: 'html',
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('https://example.com', expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
@@ -75,7 +81,11 @@ describe('bridge scraper', () => {
 
     const result = await scrape({ url: 'https://docs.aws.amazon.com/some.pdf' });
 
-    expect(result).toBe('<html><body>proxied</body></html>');
+    expect(result).toEqual({
+      contentType: 'text/html',
+      content: '<html><body>proxied</body></html>',
+      format: 'html',
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -89,11 +99,34 @@ describe('bridge scraper', () => {
     );
   });
 
-  it('throws a clear proxy guidance message when direct fetch throws TypeError and no proxy is configured', async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as typeof fetch;
+  it('falls back to document extraction for blocked PDF requests without a configured proxy', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(createResponse({ contentType: 'text/plain', text: 'AWS design patterns text' }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
     const scrape = await loadScrape();
 
     await expect(scrape({ url: 'https://docs.aws.amazon.com/some.pdf' }))
+      .resolves
+      .toEqual({
+        contentType: 'text/plain',
+        content: 'AWS design patterns text',
+        format: 'text',
+      });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      DOCUMENT_FALLBACK_URL,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('throws a clear proxy guidance message when direct fetch throws TypeError and no proxy is configured for HTML targets', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as typeof fetch;
+    const scrape = await loadScrape();
+
+    await expect(scrape({ url: 'https://example.com' }))
       .rejects
       .toThrow(/VITE_CORS_PROXY_URL/);
   });
@@ -119,7 +152,11 @@ describe('bridge scraper', () => {
     const scrape = await loadScrape();
     const result = await scrape({ url: 'https://example.com', selector: '.price' });
 
-    expect(result).toBe('<div class="price">19 EUR</div>');
+    expect(result).toEqual({
+      contentType: 'text/html',
+      content: '<div class="price">19 EUR</div>',
+      format: 'html',
+    });
   });
 
   it('fails when the requested selector is not present', async () => {
@@ -140,15 +177,35 @@ describe('bridge scraper', () => {
       .toThrow('Selector ".price" not found for https://example.com');
   });
 
-  it('rejects unsupported content types such as application/pdf', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(createResponse({
-      contentType: 'application/pdf',
-    })) as unknown as typeof fetch;
+  it('falls back to document extraction when a direct fetch returns application/pdf', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(createResponse({ contentType: 'application/pdf' }))
+      .mockResolvedValueOnce(createResponse({ contentType: 'text/plain', text: 'PDF content extracted' }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
     const scrape = await loadScrape();
 
     await expect(scrape({ url: 'https://example.com/doc.pdf' }))
+      .resolves
+      .toEqual({
+        contentType: 'text/plain',
+        content: 'PDF content extracted',
+        format: 'text',
+      });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://r.jina.ai/http://example.com/doc.pdf',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('rejects selectors for PDF targets because document fallback returns plain text', async () => {
+    globalThis.fetch = vi.fn() as typeof fetch;
+    const scrape = await loadScrape();
+
+    await expect(scrape({ url: 'https://example.com/doc.pdf', selector: '.price' }))
       .rejects
-      .toThrow(/Unsupported content type "application\/pdf"/);
+      .toThrow(/Selectors are only supported for HTML scraping/);
   });
 
   it('fails on non-2xx responses instead of returning error-page html', async () => {

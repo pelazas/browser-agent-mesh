@@ -42,7 +42,11 @@ describe('BridgeAgent scrape execution', () => {
   });
 
   it('executes a ready scrape task and stores a structured result', async () => {
-    mockedScrape.mockResolvedValue('<html>ok</html>');
+    mockedScrape.mockResolvedValue({
+      contentType: 'text/html',
+      content: '<html>ok</html>',
+      format: 'html',
+    });
 
     const agent = new BridgeAgent();
     const doc = (agent as unknown as { doc: Y.Doc }).doc;
@@ -64,7 +68,8 @@ describe('BridgeAgent scrape execution', () => {
       type: 'scrape_result',
       url: 'https://example.com/',
       contentType: 'text/html',
-      html: '<html>ok</html>',
+      format: 'html',
+      content: '<html>ok</html>',
       bytes: 15,
       selector: null,
     });
@@ -72,7 +77,7 @@ describe('BridgeAgent scrape execution', () => {
   });
 
   it('marks a claimed scrape task running before completion', async () => {
-    let resolveScrape: ((value: string) => void) | null = null;
+    let resolveScrape: ((value: { contentType: string; content: string; format: 'html' | 'text' }) => void) | null = null;
     mockedScrape.mockImplementation(() => new Promise((resolve) => {
       resolveScrape = resolve;
     }));
@@ -90,7 +95,11 @@ describe('BridgeAgent scrape execution', () => {
     expect(node.get('claimedBy')).toBe((agent as unknown as { nodeId: string }).nodeId);
     expect(node.get('startedAt')).not.toBeNull();
 
-    resolveScrape?.('<html>ok</html>');
+    resolveScrape?.({
+      contentType: 'text/html',
+      content: '<html>ok</html>',
+      format: 'html',
+    });
     await pollPromise;
 
     expect(node.get('status')).toBe('completed');
@@ -114,7 +123,11 @@ describe('BridgeAgent scrape execution', () => {
   });
 
   it('trims trailing punctuation from fallback prompt URLs before scraping', async () => {
-    mockedScrape.mockResolvedValue('<html>ok</html>');
+    mockedScrape.mockResolvedValue({
+      contentType: 'text/html',
+      content: '<html>ok</html>',
+      format: 'html',
+    });
 
     const agent = new BridgeAgent();
     const doc = (agent as unknown as { doc: Y.Doc }).doc;
@@ -133,15 +146,16 @@ describe('BridgeAgent scrape execution', () => {
   });
 
   it('scrapes the trimmed Sentinel-generated URL from a prompt workflow', async () => {
-    mockedScrape.mockResolvedValue('<html>ok</html>');
-
-    const sentinelDoc = createRootDoc();
-    const sentinel = new SentinelAgent(sentinelDoc);
-    sentinel.handlePrompt('scrape https://example.com/products, please');
+    mockedScrape.mockResolvedValue({
+      contentType: 'text/html',
+      content: '<html>ok</html>',
+      format: 'html',
+    });
 
     const bridge = new BridgeAgent();
     const bridgeDoc = (bridge as unknown as { doc: Y.Doc }).doc;
-    Y.applyUpdate(bridgeDoc, Y.encodeStateAsUpdate(sentinelDoc));
+    const sentinel = new SentinelAgent(bridgeDoc);
+    sentinel.handlePrompt('scrape https://example.com/products, please');
 
     await (bridge as unknown as { pollForToolCalls: () => Promise<void> }).pollForToolCalls();
 
@@ -153,7 +167,11 @@ describe('BridgeAgent scrape execution', () => {
   });
 
   it('skips scrape tasks locked by another node', async () => {
-    mockedScrape.mockResolvedValue('<html>ok</html>');
+    mockedScrape.mockResolvedValue({
+      contentType: 'text/html',
+      content: '<html>ok</html>',
+      format: 'html',
+    });
 
     const agent = new BridgeAgent();
     const doc = (agent as unknown as { doc: Y.Doc }).doc;

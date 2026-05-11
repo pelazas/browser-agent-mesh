@@ -10,3 +10,4 @@ playwright-report/
 .turbo/
 **/package-lock.json
 tsconfig.tsbuildinfo
+docs/**
