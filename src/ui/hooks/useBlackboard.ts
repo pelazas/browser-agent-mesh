@@ -59,7 +59,7 @@ export function useBlackboard(): UseBlackboardReturn {
       setNodes((prev) => (shallowEqualMaps(prev, data) ? prev : data));
     };
     if (nodesMap) {
-      nodesMap.observe(refreshNodes);
+      nodesMap.observeDeep(refreshNodes);
     }
     refreshNodes();
 
@@ -82,7 +82,7 @@ export function useBlackboard(): UseBlackboardReturn {
       });
     };
     if (workflowsMap) {
-      workflowsMap.observe(refreshWorkflows);
+      workflowsMap.observeDeep(refreshWorkflows);
     }
     refreshWorkflows();
 
@@ -97,7 +97,7 @@ export function useBlackboard(): UseBlackboardReturn {
       setPromptRequests((prev) => (shallowEqualMaps(prev, data) ? prev : data));
     };
     if (promptRequestsMap) {
-      promptRequestsMap.observe(refreshPromptRequests);
+      promptRequestsMap.observeDeep(refreshPromptRequests);
     }
     refreshPromptRequests();
 
@@ -112,14 +112,12 @@ export function useBlackboard(): UseBlackboardReturn {
       setTelemetry((prev) => (shallowEqualMaps(prev, data) ? prev : data));
     };
     if (telemetryMap) {
-      telemetryMap.observe(refreshTelemetry);
+      telemetryMap.observeDeep(refreshTelemetry);
     }
     refreshTelemetry();
 
-    // Polling fallback: Y.applyUpdate (remote sync) may not fire
-    // Y.Map observers reliably on deeply nested maps.
-    // The BlackboardDebugger reads directly from the doc;
-    // this keeps the UI reactive state in sync with the same data.
+    // Polling fallback only: deep observers should cover nested workflow/task
+    // changes, but the interval keeps the UI resilient to odd browser timing.
     const interval = setInterval(() => {
       refreshNodes();
       refreshWorkflows();
@@ -129,16 +127,16 @@ export function useBlackboard(): UseBlackboardReturn {
 
     return () => {
       if (nodesMap) {
-        nodesMap.unobserve(refreshNodes);
+        nodesMap.unobserveDeep(refreshNodes);
       }
       if (workflowsMap) {
-        workflowsMap.unobserve(refreshWorkflows);
+        workflowsMap.unobserveDeep(refreshWorkflows);
       }
       if (promptRequestsMap) {
-        promptRequestsMap.unobserve(refreshPromptRequests);
+        promptRequestsMap.unobserveDeep(refreshPromptRequests);
       }
       if (telemetryMap) {
-        telemetryMap.unobserve(refreshTelemetry);
+        telemetryMap.unobserveDeep(refreshTelemetry);
       }
       clearInterval(interval);
     };

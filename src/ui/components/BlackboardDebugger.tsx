@@ -119,10 +119,10 @@ export const BlackboardDebugger: React.FC = () => {
       setTree(children);
     };
 
-    rootMap.observe(refresh);
+    rootMap.observeDeep(refresh);
     refresh();
 
-    return () => { rootMap.unobserve(refresh); };
+    return () => { rootMap.unobserveDeep(refresh); };
   }, [doc, visible]);
 
   return (
