@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 
 interface MeshNode {
   id: string;
-  role: string;
-  status: string;
   gpu?: string;
-  tasks?: number;
+  selectedModel: string | null;
+  agentCount: number;
 }
 
 interface MeshGraphProps {
@@ -18,14 +17,11 @@ export const MeshGraph: React.FC<MeshGraphProps> = ({ nodes }) => {
       <h3>Mesh Topology</h3>
       <div className="mesh-graph__grid">
         {nodes.map((node) => (
-          <div key={node.id} className={`mesh-node mesh-node--${node.status}`}>
-            <div className="mesh-node__role">{node.role}</div>
+          <div key={node.id} className="mesh-node">
+            <div className="mesh-node__role">tab</div>
             <div className="mesh-node__id">{node.id.slice(0, 8)}</div>
-            <div className="mesh-node__status">{node.status}</div>
             {node.gpu && <div className="mesh-node__gpu">{node.gpu}</div>}
-            {node.tasks !== undefined && (
-              <div className="mesh-node__tasks">{node.tasks} tasks</div>
-            )}
+            {node.selectedModel && <div className="mesh-node__tasks">{node.selectedModel}</div>}
           </div>
         ))}
         {nodes.length === 0 && (

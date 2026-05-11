@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractTaskActivities } from '@ui/hooks/useAppView';
+import { extractMeshNodes, extractTaskActivities } from '@ui/hooks/useAppView';
 
 describe('extractTaskActivities', () => {
   it('returns empty array when workflow has no dag', () => {
@@ -183,5 +183,57 @@ describe('extractTaskActivities', () => {
     expect(result).toHaveLength(1);
     expect(result[0].tokensPerSec).toBe(52.5);
     expect(result[0].modelId).toBe('SmolLM-135M');
+  });
+});
+
+describe('extractMeshNodes', () => {
+  it('groups agent nodes by tab and prefers worker GPU/model metadata', () => {
+    const nodes = new Map<string, unknown>([
+      ['ui-1', {
+        id: 'ui-1',
+        role: 'ui',
+        tabId: 'tab-1',
+        gpu: null,
+        selectedModelId: null,
+        tasks: [],
+      }],
+      ['worker-1', {
+        id: 'worker-1',
+        role: 'worker',
+        tabId: 'tab-1',
+        gpu: {
+          vramEstimateMB: 4096,
+          compatibleModels: ['Llama-3.2-3B-Instruct-q4f32_1-MLC'],
+        },
+        selectedModelId: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+        tasks: ['task-1'],
+      }],
+      ['worker-2', {
+        id: 'worker-2',
+        role: 'worker',
+        tabId: 'tab-2',
+        gpu: {
+          vramEstimateMB: 2048,
+          compatibleModels: ['SmolLM-135M'],
+        },
+        selectedModelId: 'SmolLM-135M',
+        tasks: [],
+      }],
+    ]);
+
+    expect(extractMeshNodes(nodes)).toEqual([
+      {
+        id: 'tab-1',
+        gpu: '4096MB',
+        selectedModel: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+        agentCount: 2,
+      },
+      {
+        id: 'tab-2',
+        gpu: '2048MB',
+        selectedModel: 'SmolLM-135M',
+        agentCount: 1,
+      },
+    ]);
   });
 });

@@ -102,5 +102,5 @@ User prompt → UI → Blackboard.promptRequests[requestId]
 - **Event Sourcing:** Every CRDT mutation is appended to an immutable append-only log in OPFS SQLite.
 - **Telemetry:** Agents broadcast VRAM usage, token generation speed, and peer count via Gossipsub. UI renders real-time mesh health.
 - **Persistence:** SQLite WASM in OPFS stores the event log and periodic Y.Doc checkpoints. On tab reload, agents re-sync with the mesh and resume execution.
-- **UI Observability:** The React UI observes both `promptRequests` and `activeWorkflows` so users can see queued/routing activity before a workflow exists, then live workflow progress, streamed LLM partial output/model selection while inference is running, and final outputs once tasks complete.
+- **UI Observability:** The React UI observes both `promptRequests` and `activeWorkflows` so users can see queued/routing activity before a workflow exists, then live workflow progress, streamed LLM partial output/model selection while inference is running, and final outputs once tasks complete. Node metadata is grouped by shared `tabId` so hover cards and topology tiles represent browser tabs rather than individual agent workers.
 - **Scraper Proxy Config:** Set `VITE_CORS_PROXY_URL` to a proxy base URL that accepts `?url=<encoded-target-url>` when cross-origin targets do not emit CORS headers.

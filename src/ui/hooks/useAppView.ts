@@ -2,11 +2,9 @@ import { useMemo } from 'react';
 
 interface MeshNodeUI {
   id: string;
-  role: string;
-  status: string;
   gpu?: string;
-  tasks?: number;
-  models: string[];
+  selectedModel: string | null;
+  agentCount: number;
 }
 
 interface MetricsEntryUI {
@@ -111,6 +109,43 @@ interface UseAppViewReturn {
   promptStatus: PromptStatusView;
 }
 
+export function extractMeshNodes(nodes: Map<string, unknown>): MeshNodeUI[] {
+  const grouped = new Map<string, MeshNodeUI>();
+
+  nodes.forEach((val: unknown, key: string) => {
+    const data = val as Record<string, unknown>;
+    if (!data) return;
+
+    const tabId = typeof data.tabId === 'string' && data.tabId.length > 0
+      ? data.tabId
+      : key;
+    const existing = grouped.get(tabId) ?? {
+      id: tabId,
+      gpu: undefined,
+      selectedModel: null,
+      agentCount: 0,
+    };
+    const gpu = data.gpu as Record<string, unknown> | null | undefined;
+    const role = typeof data.role === 'string' ? data.role : null;
+    const vramEstimateMB = typeof gpu?.vramEstimateMB === 'number' ? gpu.vramEstimateMB : null;
+    const selectedModel = typeof data.selectedModelId === 'string' ? data.selectedModelId : null;
+
+    existing.agentCount += 1;
+    if (role === 'worker') {
+      if (vramEstimateMB !== null) {
+        existing.gpu = `${vramEstimateMB}MB`;
+      }
+      if (selectedModel !== null) {
+        existing.selectedModel = selectedModel;
+      }
+    }
+
+    grouped.set(tabId, existing);
+  });
+
+  return Array.from(grouped.values()).sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function extractWorkflowResponse(workflow: WorkflowRecordUI): {
   modelId: string | null;
   responseText: string | null;
@@ -175,24 +210,7 @@ export function useAppView({
   promptRequests,
   telemetry,
 }: UseAppViewArgs): UseAppViewReturn {
-  const meshNodes = useMemo(() => {
-    const result: MeshNodeUI[] = [];
-    nodes.forEach((val: unknown, key: string) => {
-      const data = val as Record<string, unknown>;
-      if (!data) return;
-      result.push({
-        id: key,
-        role: (data.role as string) ?? 'unknown',
-        status: (data.status as string) ?? 'offline',
-        gpu: data.gpu ? `${(data.gpu as Record<string, number>)?.vramEstimateMB}MB` : undefined,
-        tasks: Array.isArray(data.tasks) ? (data.tasks as unknown[]).length : undefined,
-        models: Array.isArray((data.gpu as Record<string, unknown> | null)?.compatibleModels)
-          ? (data.gpu as Record<string, unknown>).compatibleModels as string[]
-          : [],
-      });
-    });
-    return result;
-  }, [nodes]);
+  const meshNodes = useMemo(() => extractMeshNodes(nodes), [nodes]);
 
   const telemetryMetrics = useMemo(() => {
     const result: MetricsEntryUI[] = [];
