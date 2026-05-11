@@ -4,6 +4,8 @@ import { RichPromptInput } from '@ui/components/RichPromptInput';
 import { TelemetryPanel } from '@ui/components/TelemetryPanel';
 import { WorkflowView } from '@ui/components/WorkflowView';
 import { BlackboardDebugger } from '@ui/components/BlackboardDebugger';
+import { PeerPopover } from '@ui/components/PeerPopover';
+import { usePeerPopover } from '@ui/components/usePeerPopover';
 import { useBlackboard } from '@ui/hooks/useBlackboard';
 import { useAppView } from '@ui/hooks/useAppView';
 import { useNetworkHealth } from '@ui/hooks/useMesh';
@@ -18,19 +20,19 @@ export const App: React.FC = () => {
     promptRequests,
     telemetry,
   });
+  const popover = usePeerPopover(meshNodes, networkHealth);
 
   return (
     <div className="app">
       <header className="app__header">
         <h1 className="app__title">Browser Agent Mesh</h1>
-        <div className="app__status">
+        <div
+          className="app__status"
+          onMouseEnter={popover.open}
+          onMouseLeave={popover.close}
+        >
           <span
             className={`app__status-dot${networkHealth.connected ? ' app__status-dot--connected' : networkHealth.signalingConnected ? ' app__status-dot--signaling' : ''}`}
-            title={
-              networkHealth.rtcAvailable
-                ? `RTCPeerConnection: available | Signaling: ${networkHealth.signalingConnected ? 'connected' : 'disconnected'} | WebRTC: ${networkHealth.connected ? 'connected' : 'waiting'} | Awareness: ${networkHealth.awarenessStates} states`
-                : 'RTCPeerConnection NOT available in this context — WebRTC will not work'
-            }
           />
           <span>
             {networkHealth.connected
@@ -41,6 +43,7 @@ export const App: React.FC = () => {
                   ? 'WebRTC unavailable'
                   : 'disconnected (no signaling)'}
           </span>
+          <PeerPopover popover={popover} />
         </div>
       </header>
 
