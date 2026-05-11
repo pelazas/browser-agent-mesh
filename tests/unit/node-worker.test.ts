@@ -366,6 +366,82 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     }
   });
 
+  it('fails reduce tasks without a workflow context', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const task = createTask({
+      id: 'reduce-1',
+      type: 'reduce',
+      description: 'Process and structure extracted data',
+      args: { prompt: 'Process and structure extracted data' },
+    });
+
+    await expect(
+      (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(task),
+    ).rejects.toThrow(/requires workflowId/);
+  });
+
+  it('fails reduce tasks with no completed scrape predecessor', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = createTask({
+      id: 'reduce-1',
+      type: 'reduce',
+      description: 'Process and structure extracted data',
+      args: { prompt: 'Process and structure extracted data' },
+    });
+
+    seedWorkflow(doc, 'wf-reduce', [reduceTask]);
+
+    await expect(
+      (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(
+        reduceTask,
+        'wf-reduce',
+      ),
+    ).rejects.toThrow(/no completed scrape predecessor/);
+  });
+
+  it('fails reduce tasks when scrape content is empty after cleanup', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const scrapeTask = createTask({
+      id: 'scrape-1',
+      type: 'scrape',
+      description: 'Scrape example source',
+      status: 'completed',
+      claimedBy: 'bridge-1',
+      args: { url: 'https://example.com/source' },
+      result: {
+        type: 'scrape_result',
+        url: 'https://example.com/source',
+        contentType: 'text/plain',
+        format: 'text',
+        content: 'URL Source: https://example.com/source\nPublished Time: 2026-05-11T09:30:00Z\nMarkdown Content:',
+        bytes: 100,
+        selector: null,
+      },
+    });
+
+    const reduceTask = createTask({
+      id: 'reduce-1',
+      type: 'reduce',
+      description: 'Process and structure extracted data',
+      args: { prompt: 'Process and structure extracted data' },
+    });
+
+    seedWorkflow(doc, 'wf-reduce', [scrapeTask, reduceTask], [
+      { id: 'edge-scrape-reduce', source: 'scrape-1', target: 'reduce-1', type: 'sequential' },
+    ]);
+
+    await expect(
+      (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(
+        reduceTask,
+        'wf-reduce',
+      ),
+    ).rejects.toThrow(/empty after cleanup/);
+  });
+
   it('persists task result into the DAG node on completion', () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
     const doc = seedAgentDoc(agent);

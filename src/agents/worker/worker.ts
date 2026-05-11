@@ -14,6 +14,7 @@ import { DAG } from '@core/graph/dag';
 
 const STREAM_FLUSH_INTERVAL_MS = 150;
 const STREAM_FLUSH_MIN_CHARS = 24;
+const DEFAULT_REDUCE_CONFIDENCE = 0.8;
 
 interface NodeConfig {
   gpuProfile: GPUProfile | null;
@@ -197,18 +198,18 @@ export class NodeWorkerAgent extends BaseAgent {
       }
 
       if (!scrapeContent) {
-        throw new Error('No usable scrape content found for reduce task');
+        throw new Error('Reduce task has no completed scrape predecessor with content');
       }
 
       const cleanedText = this.cleanExtractedDocumentText(scrapeContent);
       if (!cleanedText.trim()) {
-        throw new Error('No usable scrape content found for reduce task');
+        throw new Error('Scrape content was empty after cleanup');
       }
 
       const title = this.deriveDocumentTitle(cleanedText);
       const sections = this.deriveSectionHeadings(cleanedText);
       const summary = this.buildOverview(cleanedText);
-      const takeaways = this.deriveTakeaways(cleanedText, sections);
+      const takeaways = this.deriveTakeaways(sections);
 
       return {
         type: 'reduce_result',
@@ -217,7 +218,7 @@ export class NodeWorkerAgent extends BaseAgent {
         summary,
         sections,
         takeaways,
-        confidence: 0.8,
+        confidence: DEFAULT_REDUCE_CONFIDENCE,
       };
     }
 
@@ -264,15 +265,6 @@ export class NodeWorkerAgent extends BaseAgent {
 
   private updateWorkflowPreview(workflowId: string, result: unknown): void {
     updateWorkflowPreviewResult(this.doc, workflowId, result);
-  }
-
-  private getWorkflowNodeMap(workflowId: string): Y.Map<Y.Map<unknown>> {
-    const workflows = getActiveWorkflows(this.doc);
-    const workflow = workflows.get(workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow not found: ${workflowId}`);
-    }
-    return workflow.get('dag') as Y.Map<Y.Map<unknown>>;
   }
 
   private getCompletedPredecessorResults(workflowId: string, taskId: string): unknown[] {
@@ -329,37 +321,27 @@ export class NodeWorkerAgent extends BaseAgent {
     let currentHeading = '';
     let currentContent: string[] = [];
 
+    const flushSection = (): void => {
+      if (currentHeading || currentContent.length > 0) {
+        sections.push({
+          heading: currentHeading,
+          content: currentContent.join('\n').trim(),
+        });
+      }
+    };
+
     for (const line of lines) {
-      if (line.startsWith('# ')) {
-        if (currentHeading || currentContent.length > 0) {
-          sections.push({
-            heading: currentHeading,
-            content: currentContent.join('\n').trim(),
-          });
-        }
-        currentHeading = line.replace(/^#\s+/, '').trim();
-        currentContent = [];
-      } else if (line.startsWith('## ')) {
-        if (currentHeading || currentContent.length > 0) {
-          sections.push({
-            heading: currentHeading,
-            content: currentContent.join('\n').trim(),
-          });
-        }
-        currentHeading = line.replace(/^##\s+/, '').trim();
+      const headingMatch = line.match(/^(#{1,2})\s+(.+)$/);
+      if (headingMatch) {
+        flushSection();
+        currentHeading = headingMatch[2].trim();
         currentContent = [];
       } else {
         currentContent.push(line);
       }
     }
 
-    if (currentHeading || currentContent.length > 0) {
-      sections.push({
-        heading: currentHeading,
-        content: currentContent.join('\n').trim(),
-      });
-    }
-
+    flushSection();
     return sections;
   }
 
@@ -372,21 +354,15 @@ export class NodeWorkerAgent extends BaseAgent {
     return paragraphs.slice(0, 2).join(' ').trim();
   }
 
-  private deriveTakeaways(
-    _text: string,
-    sections: Array<{ heading: string; content: string }>,
-  ): string[] {
+  private deriveTakeaways(sections: Array<{ heading: string; content: string }>): string[] {
     const takeaways: string[] = [];
     for (const section of sections) {
       if (section.heading) {
         takeaways.push(section.heading);
       }
-      const sentences = section.content
-        .split('.')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 10);
-      if (sentences.length > 0) {
-        takeaways.push(sentences[0] + '.');
+      const firstSentence = section.content.split(/\n\s*\n/u)[0]?.trim();
+      if (firstSentence && firstSentence.length > 10) {
+        takeaways.push(firstSentence);
       }
     }
     return takeaways.slice(0, 5);
