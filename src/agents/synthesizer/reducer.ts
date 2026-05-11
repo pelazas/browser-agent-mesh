@@ -8,14 +8,53 @@ export interface FragmentOutput {
   confidence: number;
 }
 
+function formatReduceResult(content: unknown): string | null {
+  if (
+    typeof content === 'object' &&
+    content !== null &&
+    (content as { type?: unknown }).type === 'reduce_result'
+  ) {
+    const r = content as {
+      title?: string;
+      summary?: string;
+      sections?: string[];
+      takeaways?: string[];
+    };
+
+    const parts: string[] = [];
+    if (r.title) {
+      parts.push(`# ${r.title}`);
+    }
+    if (r.summary) {
+      parts.push(r.summary);
+    }
+    if (r.sections && r.sections.length > 0) {
+      parts.push('## Key Sections');
+      for (const section of r.sections) {
+        parts.push(`- ${section}`);
+      }
+    }
+    if (r.takeaways && r.takeaways.length > 0) {
+      parts.push('## Notable Takeaways');
+      for (const takeaway of r.takeaways) {
+        parts.push(`- ${takeaway}`);
+      }
+    }
+    return parts.join('\n\n');
+  }
+  return null;
+}
+
 export async function consolidate(outputs: FragmentOutput[]): Promise<string> {
   log.info('consolidating outputs', { count: outputs.length });
 
   const sorted = [...outputs].sort((a, b) => b.confidence - a.confidence);
 
-  const parts = sorted.map((o) =>
-    `[Task ${o.taskId}] (confidence: ${(o.confidence * 100).toFixed(0)}%)\n${JSON.stringify(o.content)}`,
-  );
+  const parts = sorted.map((o) => {
+    const formatted = formatReduceResult(o.content);
+    const body = formatted !== null ? formatted : JSON.stringify(o.content);
+    return `[Task ${o.taskId}] (confidence: ${(o.confidence * 100).toFixed(0)}%)\n${body}`;
+  });
 
   return parts.join('\n\n---\n\n');
 }
