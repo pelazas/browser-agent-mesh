@@ -226,15 +226,15 @@ interface ScrapeResultFragment {
 
 HTML scrapes return `format: 'html'` and preserve the raw HTML fragment in `content`. PDF/document fallback scrapes return `format: 'text'` and store extracted plain text in `content`. CSS selectors are only supported for HTML scrapes.
 
-Common fragment payload written by the synthesizer for reduced scrape results:
+Common fragment payload written by node workers for reduced scrape results:
 
 ```ts
 interface ReduceResultFragment {
   type: 'reduce_result';
   sourceType: 'scrape';
-  title: string | null;
+  title: string;
   summary: string;
-  sections: string[];
+  sections: Array<{ heading: string; content: string }>;
   takeaways: string[];
   confidence: number;
 }
