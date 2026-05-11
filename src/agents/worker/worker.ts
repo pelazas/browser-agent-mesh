@@ -206,6 +206,19 @@ export class NodeWorkerAgent extends BaseAgent {
         throw new Error('Scrape content was empty after cleanup');
       }
 
+      const llmSummary = await this.summarizeWithLlm(cleanedText);
+      if (llmSummary) {
+        return {
+          type: 'reduce_result',
+          sourceType: 'scrape_result',
+          title: llmSummary.title,
+          summary: llmSummary.summary,
+          sections: llmSummary.sections,
+          takeaways: llmSummary.takeaways,
+          confidence: DEFAULT_REDUCE_CONFIDENCE,
+        };
+      }
+
       const title = this.deriveDocumentTitle(cleanedText);
       const sections = this.deriveSectionHeadings(cleanedText);
       const summary = this.buildOverview(cleanedText);
@@ -345,5 +358,89 @@ export class NodeWorkerAgent extends BaseAgent {
       .filter((heading) => heading.length > 0)
       .map((heading) => `Covers ${heading}.`);
     return takeaways.slice(0, 5);
+  }
+
+  private async summarizeWithLlm(text: string): Promise<{
+    title: string | null;
+    summary: string;
+    sections: string[];
+    takeaways: string[];
+  } | null> {
+    try {
+      await this.ensureModelReady();
+      const status = getEngineStatus();
+      if (status !== 'ready') {
+        this.log.warn('LLM not ready for summarization, falling back to heuristics', { status });
+        return null;
+      }
+
+      const MAX_CHARS = 30_000;
+      const truncated = text.length > MAX_CHARS
+        ? `${text.slice(0, MAX_CHARS)}\n\n[Document truncated]`
+        : text;
+
+      const prompt = [
+        'You are a document summarizer. Read the text below and return ONLY a JSON object',
+        'with this exact shape (no markdown code blocks, no extra text):',
+        '',
+        '{"title":"...","summary":"2-3 paragraph overview","sections":["Key topic 1",...],"takeaways":["Notable insight 1",...]}',
+        '',
+        'Keep sections and takeaways concise. Limit sections to 6 items and takeaways to 5 items.',
+        '',
+        'Document text:',
+        '---',
+        truncated,
+      ].join('\n');
+
+      const response = await chatStream(
+        [{ role: 'user', content: prompt }],
+        undefined,
+        () => { /* no progress callback needed for reduce */ },
+      );
+
+      const raw = response.message.content.trim();
+      const parsed = this.tryParseSummaryJson(raw);
+
+      if (parsed) {
+        this.log.info('LLM summarization succeeded', {
+          title: parsed.title,
+          sectionCount: parsed.sections.length,
+          takeawayCount: parsed.takeaways.length,
+        });
+        return parsed;
+      }
+
+      this.log.warn('LLM summarization returned unparseable JSON, falling back to heuristics', { raw: raw.slice(0, 200) });
+      return null;
+    } catch (err) {
+      this.log.warn('LLM summarization failed, falling back to heuristics', { error: String(err) });
+      return null;
+    }
+  }
+
+  private tryParseSummaryJson(raw: string): {
+    title: string | null;
+    summary: string;
+    sections: string[];
+    takeaways: string[];
+  } | null {
+    try {
+      // Strip markdown code fences if present
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+
+      const title = typeof parsed.title === 'string' ? parsed.title : null;
+      const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      const sections = Array.isArray(parsed.sections)
+        ? parsed.sections.filter((s): s is string => typeof s === 'string')
+        : [];
+      const takeaways = Array.isArray(parsed.takeaways)
+        ? parsed.takeaways.filter((s): s is string => typeof s === 'string')
+        : [];
+
+      return { title, summary, sections, takeaways };
+    } catch {
+      return null;
+    }
   }
 }

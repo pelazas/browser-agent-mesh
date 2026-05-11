@@ -398,6 +398,75 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(result.output).toContain('Reduced:');
   });
 
+  it('uses LLM chatStream to summarize scrape content', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream.mockResolvedValue({
+      message: { role: 'assistant', content: '{"title":"AWS Cloud Patterns","summary":"Guide to AWS design patterns.","sections":["Anti-corruption","Circuit breaker"],"takeaways":["Use patterns for reliability."]}' },
+      tokensGenerated: 50,
+      tokensPerSec: 25,
+    });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      [
+        '# Example Article',
+        '',
+        'Lead paragraph with concrete details.',
+        '',
+        '## Key Facts',
+        'The first sourced fact.',
+      ].join('\n'),
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(mockedChatStream).toHaveBeenCalledTimes(1);
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toBe('AWS Cloud Patterns');
+    expect(result.summary).toBe('Guide to AWS design patterns.');
+    expect(result.sections).toEqual(['Anti-corruption', 'Circuit breaker']);
+    expect(result.takeaways).toEqual(['Use patterns for reliability.']);
+  });
+
+  it('falls back to heuristic reduce when LLM returns unparseable JSON', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream.mockResolvedValue({
+      message: { role: 'assistant', content: 'This is not JSON at all' },
+      tokensGenerated: 10,
+      tokensPerSec: 20,
+    });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      [
+        '# Example Article',
+        '',
+        'Lead paragraph with concrete details.',
+      ].join('\n'),
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(mockedChatStream).toHaveBeenCalledTimes(1);
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toBeTypeOf('string');
+    expect(result.summary).toBeTypeOf('string');
+  });
+
   it('fails reduce tasks when scrape content is empty after cleanup', async () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
     const doc = seedAgentDoc(agent);
