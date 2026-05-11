@@ -42,6 +42,72 @@ const selectedModel = {
   description: 'Balanced performance',
 };
 
+function createTaskEntry(task: TaskNode): Y.Map<unknown> {
+  const node = new Y.Map<unknown>();
+  node.set('id', task.id);
+  node.set('type', task.type);
+  node.set('description', task.description);
+  node.set('status', task.status);
+  node.set('claimedBy', task.claimedBy);
+  node.set('args', task.args);
+  node.set('result', task.result);
+  node.set('error', task.error);
+  node.set('createdAt', task.createdAt);
+  node.set('startedAt', task.startedAt);
+  node.set('completedAt', task.completedAt);
+  return node;
+}
+
+function seedReduceWorkflow(doc: Y.Doc, scrapeContent: string): TaskNode {
+  const workflow = createWorkflow(doc, 'wf-reduce', 'worker-1', 'test prompt');
+  const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+  const edges = workflow.get('edges') as Y.Array<unknown>;
+
+  const scrapeTask: TaskNode = {
+    id: 'scrape-1',
+    type: 'scrape',
+    description: 'Scrape example source',
+    status: 'completed',
+    claimedBy: 'bridge-1',
+    args: { url: 'https://example.com/source' },
+    result: {
+      type: 'scrape_result',
+      url: 'https://example.com/source',
+      contentType: 'text/plain',
+      format: 'text',
+      content: scrapeContent,
+      bytes: scrapeContent.length,
+      selector: null,
+    },
+    error: null,
+    createdAt: Date.now(),
+    startedAt: Date.now(),
+    completedAt: Date.now(),
+  };
+
+  const reduceTask: TaskNode = {
+    id: 'reduce-1',
+    type: 'reduce',
+    description: 'Summarize the scraped source',
+    status: 'pending',
+    claimedBy: null,
+    args: { prompt: 'Summarize the scraped source' },
+    result: null,
+    error: null,
+    createdAt: Date.now(),
+    startedAt: null,
+    completedAt: null,
+  };
+
+  dagMap.set(scrapeTask.id, createTaskEntry(scrapeTask));
+  dagMap.set(reduceTask.id, createTaskEntry(reduceTask));
+  edges.push([{ id: 'edge-scrape-reduce', source: scrapeTask.id, target: reduceTask.id, type: 'sequential' }]);
+  workflow.set('taskCount', 2);
+  workflow.set('completedCount', 1);
+
+  return reduceTask;
+}
+
 describe('NodeWorkerAgent WebLLM integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -193,6 +259,63 @@ describe('NodeWorkerAgent WebLLM integration', () => {
       tokensGenerated: 15,
       tokensPerSec: 30,
     });
+  });
+
+  it('returns a structured reduce_result when reducing scrape task output', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = (agent as unknown as { doc: Y.Doc }).doc;
+    const seededDoc = createRootDoc();
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
+
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      'Example Article\n\nThis is a long source article with several concrete points to summarize.',
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      type: 'reduce_result',
+      title: expect.any(String),
+      summary: expect.any(String),
+      sections: expect.any(Array),
+      takeaways: expect.any(Array),
+      confidence: expect.any(Number),
+    });
+  });
+
+  it('strips reader-noise markers from reduced scrape summaries', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = (agent as unknown as { doc: Y.Doc }).doc;
+    const seededDoc = createRootDoc();
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
+
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      [
+        'URL Source: https://example.com/source',
+        'Published Time: 2026-05-11T09:30:00Z',
+        'Markdown Content:',
+        '# Example Article',
+        'The actual article content starts here and should be summarized cleanly.',
+      ].join('\n'),
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      type: 'reduce_result',
+      summary: expect.any(String),
+      sections: expect.any(Array),
+      takeaways: expect.any(Array),
+    });
+    expect(JSON.stringify(result)).not.toContain('URL Source:');
+    expect(JSON.stringify(result)).not.toContain('Markdown Content:');
+    expect(JSON.stringify(result)).not.toContain('Published Time:');
   });
 
   it('persists task result into the DAG node on completion', () => {
