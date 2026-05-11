@@ -6,10 +6,14 @@ import {
   completeTask as completeWorkflowTask,
   failTask as failWorkflowTask,
   markTaskRunning as markWorkflowTaskRunning,
+  updateWorkflowPreviewResult,
 } from '@core/blackboard/task-state';
 import type { Edge, GPUProfile, TaskNode } from '@core/blackboard/schema';
-import { chat, getCurrentModel, getEngineStatus, loadModel, selectBestModel } from '@webllm/index';
+import { chatStream, getCurrentModel, getEngineStatus, loadModel, selectBestModel } from '@webllm/index';
 import { DAG } from '@core/graph/dag';
+
+const STREAM_FLUSH_INTERVAL_MS = 150;
+const STREAM_FLUSH_MIN_CHARS = 24;
 
 interface NodeConfig {
   gpuProfile: GPUProfile | null;
@@ -90,7 +94,7 @@ export class NodeWorkerAgent extends BaseAgent {
 
         try {
           this.markTaskRunning(workflowId, task.id);
-          const result = await this.executeTask(task);
+          const result = await this.executeTask(task, workflowId);
           this.completeTask(workflowId, task.id, result);
         } catch (err) {
           this.failTask(workflowId, task.id, String(err));
@@ -101,7 +105,7 @@ export class NodeWorkerAgent extends BaseAgent {
     }
   }
 
-  private async executeTask(task: TaskNode): Promise<unknown> {
+  private async executeTask(task: TaskNode, workflowId?: string): Promise<unknown> {
     this.log.info('executing task', { taskId: task.id, type: task.type });
 
     if (task.type === 'llm_inference') {
@@ -112,13 +116,58 @@ export class NodeWorkerAgent extends BaseAgent {
       }
 
       const prompt = typeof task.args.prompt === 'string' ? task.args.prompt : task.description;
-      const response = await chat([{ role: 'user', content: prompt }]);
+      const modelId = getCurrentModel() ?? this.modelId;
+
+      if (workflowId) {
+        this.updateWorkflowPreview(workflowId, {
+          type: 'llm_result_partial',
+          prompt,
+          output: '',
+          modelId,
+          tokensGenerated: 0,
+          tokensPerSec: 0,
+        });
+      }
+
+      let lastFlushedText = '';
+      let lastFlushAt = 0;
+
+      const flushPreview = (text: string, tokensGenerated: number, tokensPerSec: number, force: boolean): void => {
+        if (!workflowId) return;
+
+        const now = Date.now();
+        const charDelta = text.length - lastFlushedText.length;
+        if (!force && charDelta < STREAM_FLUSH_MIN_CHARS && now - lastFlushAt < STREAM_FLUSH_INTERVAL_MS) {
+          return;
+        }
+
+        lastFlushedText = text;
+        lastFlushAt = now;
+        this.updateWorkflowPreview(workflowId, {
+          type: 'llm_result_partial',
+          prompt,
+          output: text,
+          modelId,
+          tokensGenerated,
+          tokensPerSec,
+        });
+      };
+
+      const response = await chatStream(
+        [{ role: 'user', content: prompt }],
+        undefined,
+        (progress) => {
+          flushPreview(progress.text, progress.tokensGenerated, progress.tokensPerSec, false);
+        },
+      );
+
+      flushPreview(response.message.content, response.tokensGenerated, response.tokensPerSec, true);
 
       return {
         type: 'llm_result',
         prompt,
         output: response.message.content,
-        modelId: getCurrentModel() ?? this.modelId,
+        modelId,
         tokensGenerated: response.tokensGenerated,
         tokensPerSec: response.tokensPerSec,
       };
@@ -167,5 +216,9 @@ export class NodeWorkerAgent extends BaseAgent {
     failWorkflowTask(this.doc, workflowId, taskId, error);
 
     this.log.warn('task failed', { taskId, workflowId, error });
+  }
+
+  private updateWorkflowPreview(workflowId: string, result: unknown): void {
+    updateWorkflowPreviewResult(this.doc, workflowId, result);
   }
 }

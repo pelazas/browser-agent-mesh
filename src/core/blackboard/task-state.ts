@@ -51,6 +51,18 @@ export function completeTask(doc: Y.Doc, workflowId: string, taskId: string, res
   return true;
 }
 
+export function updateWorkflowPreviewResult(doc: Y.Doc, workflowId: string, result: unknown): boolean {
+  const workflow = getWorkflow(doc, workflowId);
+  if (!workflow) return false;
+
+  doc.transact(() => {
+    if (workflow.get('state') !== 'active') return;
+    workflow.set('result', result);
+  });
+
+  return true;
+}
+
 export function failTask(doc: Y.Doc, workflowId: string, taskId: string, error: string): boolean {
   const target = getWorkflowAndNode(doc, workflowId, taskId);
   if (!target) return false;

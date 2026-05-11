@@ -4,7 +4,7 @@ import { createRootDoc, createWorkflow } from '@core/blackboard/root-doc';
 import { NodeWorkerAgent } from '@agents/worker/worker';
 import type { GPUProfile, TaskNode } from '@core/blackboard/schema';
 import {
-  chat,
+  chatStream,
   getCurrentModel,
   getEngineStatus,
   loadModel,
@@ -13,14 +13,14 @@ import {
 
 vi.mock('@webllm/index', () => ({
   loadModel: vi.fn(),
-  chat: vi.fn(),
+  chatStream: vi.fn(),
   getEngineStatus: vi.fn(),
   getCurrentModel: vi.fn(),
   selectBestModel: vi.fn(),
 }));
 
 const mockedLoadModel = vi.mocked(loadModel);
-const mockedChat = vi.mocked(chat);
+const mockedChatStream = vi.mocked(chatStream);
 const mockedGetEngineStatus = vi.mocked(getEngineStatus);
 const mockedGetCurrentModel = vi.mocked(getCurrentModel);
 const mockedSelectBestModel = vi.mocked(selectBestModel);
@@ -61,14 +61,29 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(mockedLoadModel).toHaveBeenCalledWith('Llama-3.2-3B-Instruct-q4f32_1-MLC');
   });
 
-  it('executes llm_inference tasks with chat()', async () => {
+  it('executes llm_inference tasks with streamed chat()', async () => {
     mockedSelectBestModel.mockReturnValue(selectedModel);
     mockedGetEngineStatus.mockReturnValue('ready');
     mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
-    mockedChat.mockResolvedValue({
-      message: { role: 'assistant', content: 'hello from model' },
-      tokensGenerated: 12,
-      tokensPerSec: 24,
+    mockedChatStream.mockImplementation(async (_messages, _config, onProgress) => {
+      onProgress?.({
+        text: 'hello',
+        chunkText: 'hello',
+        tokensGenerated: 5,
+        tokensPerSec: 20,
+      });
+      onProgress?.({
+        text: 'hello from model',
+        chunkText: ' from model',
+        tokensGenerated: 12,
+        tokensPerSec: 24,
+      });
+
+      return {
+        message: { role: 'assistant', content: 'hello from model' },
+        tokensGenerated: 12,
+        tokensPerSec: 24,
+      };
     });
 
     const agent = new NodeWorkerAgent({ gpuProfile });
@@ -88,13 +103,78 @@ describe('NodeWorkerAgent WebLLM integration', () => {
 
     const result = await (agent as unknown as { executeTask: (task: TaskNode) => Promise<unknown> }).executeTask(task) as Record<string, unknown>;
 
-    expect(mockedChat).toHaveBeenCalledWith([{ role: 'user', content: 'Summarize this text' }]);
+    expect(mockedChatStream).toHaveBeenCalledWith([{ role: 'user', content: 'Summarize this text' }], undefined, expect.any(Function));
     expect(result).toMatchObject({
       type: 'llm_result',
       output: 'hello from model',
       modelId: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
       tokensGenerated: 12,
       tokensPerSec: 24,
+    });
+  });
+
+  it('publishes a live workflow preview while streaming inference', async () => {
+    mockedSelectBestModel.mockReturnValue(selectedModel);
+    mockedGetEngineStatus.mockReturnValue('ready');
+    mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
+    mockedChatStream.mockImplementation(async (_messages, _config, onProgress) => {
+      onProgress?.({
+        text: 'Partial answer',
+        chunkText: 'Partial answer',
+        tokensGenerated: 8,
+        tokensPerSec: 32,
+      });
+
+      return {
+        message: { role: 'assistant', content: 'Partial answer complete' },
+        tokensGenerated: 15,
+        tokensPerSec: 30,
+      };
+    });
+
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = (agent as unknown as { doc: Y.Doc }).doc;
+    const seededDoc = createRootDoc();
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seededDoc));
+    const workflow = createWorkflow(doc, 'wf-stream', 'worker-1', 'test prompt');
+
+    const task: TaskNode = {
+      id: 'task-stream',
+      type: 'llm_inference',
+      description: 'Stream this text',
+      status: 'running',
+      claimedBy: 'worker-1',
+      args: { prompt: 'Stream this text' },
+      result: null,
+      error: null,
+      createdAt: Date.now(),
+      startedAt: Date.now(),
+      completedAt: null,
+    };
+    const dagMap = workflow.get('dag') as Y.Map<Y.Map<unknown>>;
+    const node = new Y.Map<unknown>();
+    node.set('id', task.id);
+    node.set('type', task.type);
+    node.set('description', task.description);
+    node.set('status', task.status);
+    node.set('claimedBy', task.claimedBy);
+    node.set('args', task.args);
+    node.set('result', task.result);
+    node.set('error', task.error);
+    node.set('createdAt', task.createdAt);
+    node.set('startedAt', task.startedAt);
+    node.set('completedAt', task.completedAt);
+    dagMap.set(task.id, node);
+
+    await (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(task, 'wf-stream');
+
+    expect(workflow.get('result')).toEqual({
+      type: 'llm_result_partial',
+      prompt: 'Stream this text',
+      output: 'Partial answer complete',
+      modelId: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+      tokensGenerated: 15,
+      tokensPerSec: 30,
     });
   });
 

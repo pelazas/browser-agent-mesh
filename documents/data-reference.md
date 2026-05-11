@@ -151,8 +151,22 @@ interface WorkflowEntry {
   taskCount: number;
   completedCount: number;
   failedCount: number;
-  result: WorkflowResult | null;
+  result: WorkflowResult | WorkflowPreviewResult | null;
   error: string | null;
+}
+```
+
+Active workflows may temporarily use `result` as a live preview channel while an LLM task is still running. The synthesizer replaces that preview with the final `WorkflowResult` when the workflow completes.
+
+### WorkflowPreviewResult
+```ts
+interface WorkflowPreviewResult {
+  type: 'llm_result_partial';
+  prompt: string;
+  output: string;
+  modelId: string | null;
+  tokensGenerated: number;
+  tokensPerSec: number;
 }
 ```
 
@@ -190,7 +204,7 @@ interface LlmResultFragment {
 }
 ```
 
-The UI should prefer `WorkflowResult.fragments[*].content.output` and `modelId` when rendering the final answer card, falling back to `WorkflowResult.content` only when no LLM fragment is available.
+The UI should prefer `WorkflowPreviewResult.output`/`modelId` while a workflow is still active, then switch to `WorkflowResult.fragments[*].content.output` and `modelId` once synthesis completes, falling back to `WorkflowResult.content` only when no LLM fragment is available.
 
 ### PromptRequestEntry
 ```ts

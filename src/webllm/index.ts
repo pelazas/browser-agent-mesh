@@ -1,12 +1,13 @@
 export {
   loadModel,
   chat,
+  chatStream,
   embed,
   unload,
   getEngineStatus,
   getCurrentModel,
 } from './engine';
-export type { EngineStatus, ChatMessage, ChatConfig, ChatResult } from './engine';
+export type { EngineStatus, ChatMessage, ChatConfig, ChatResult, ChatStreamProgress } from './engine';
 
 export {
   getAvailableModels,
