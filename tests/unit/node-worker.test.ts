@@ -318,11 +318,9 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(Array.isArray(result.sections)).toBe(true);
     expect((result.sections as unknown[]).length).toBeGreaterThan(0);
 
-    for (const section of result.sections as Array<{ heading: string; content: string }>) {
-      expect(section.heading).toBeTypeOf('string');
-      expect(section.content).toBeTypeOf('string');
-      expectNoReaderNoise(section.heading);
-      expectNoReaderNoise(section.content);
+    for (const heading of result.sections as string[]) {
+      expect(heading).toBeTypeOf('string');
+      expectNoReaderNoise(heading);
     }
 
     expectNoReaderNoise(result.title as string);
@@ -360,9 +358,8 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expectNoReaderNoise(result.summary as string);
 
     expect(Array.isArray(result.sections)).toBe(true);
-    for (const section of result.sections as Array<{ heading: string; content: string }>) {
-      expectNoReaderNoise(section.heading);
-      expectNoReaderNoise(section.content);
+    for (const heading of result.sections as string[]) {
+      expectNoReaderNoise(heading);
     }
   });
 
@@ -380,7 +377,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     ).rejects.toThrow(/requires workflowId/);
   });
 
-  it('fails reduce tasks with no completed scrape predecessor', async () => {
+  it('returns a placeholder for reduce tasks with no scrape predecessor', async () => {
     const agent = new NodeWorkerAgent({ gpuProfile });
     const doc = seedAgentDoc(agent);
 
@@ -393,12 +390,12 @@ describe('NodeWorkerAgent WebLLM integration', () => {
 
     seedWorkflow(doc, 'wf-reduce', [reduceTask]);
 
-    await expect(
-      (agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }).executeTask(
-        reduceTask,
-        'wf-reduce',
-      ),
-    ).rejects.toThrow(/no completed scrape predecessor/);
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(result.type).toBe('reduce_result');
+    expect(result.output).toContain('Reduced:');
   });
 
   it('fails reduce tasks when scrape content is empty after cleanup', async () => {

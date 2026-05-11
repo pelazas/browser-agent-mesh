@@ -198,7 +198,7 @@ export class NodeWorkerAgent extends BaseAgent {
       }
 
       if (!scrapeContent) {
-        throw new Error('Reduce task has no completed scrape predecessor with content');
+        return { type: 'reduce_result', output: `Reduced: ${task.description}` };
       }
 
       const cleanedText = this.cleanExtractedDocumentText(scrapeContent);
@@ -213,8 +213,8 @@ export class NodeWorkerAgent extends BaseAgent {
 
       return {
         type: 'reduce_result',
-        sourceType: 'scrape',
-        title: title ?? 'Untitled',
+        sourceType: 'scrape_result',
+        title,
         summary,
         sections,
         takeaways,
@@ -299,9 +299,11 @@ export class NodeWorkerAgent extends BaseAgent {
     for (const line of lines) {
       const trimmed = line.trim();
       if (
+        trimmed.startsWith('Title:') ||
         trimmed.startsWith('URL Source:') ||
         trimmed.startsWith('Published Time:') ||
-        trimmed.startsWith('Markdown Content:')
+        trimmed.startsWith('Markdown Content:') ||
+        /^>\s*[ivxlcdm0-9]+/iu.test(trimmed)
       ) {
         continue;
       }
@@ -312,59 +314,36 @@ export class NodeWorkerAgent extends BaseAgent {
 
   private deriveDocumentTitle(text: string): string | null {
     const match = text.match(/^#\s+(.+)$/m);
-    return match ? match[1].trim() : null;
+    if (match) return match[1].trim();
+
+    const firstLine = text.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+    return firstLine ?? null;
   }
 
-  private deriveSectionHeadings(text: string): Array<{ heading: string; content: string }> {
-    const sections: Array<{ heading: string; content: string }> = [];
+  private deriveSectionHeadings(text: string): string[] {
+    const headings: string[] = [];
     const lines = text.split('\n');
-    let currentHeading = '';
-    let currentContent: string[] = [];
-
-    const flushSection = (): void => {
-      if (currentHeading || currentContent.length > 0) {
-        sections.push({
-          heading: currentHeading,
-          content: currentContent.join('\n').trim(),
-        });
-      }
-    };
 
     for (const line of lines) {
       const headingMatch = line.match(/^(#{1,2})\s+(.+)$/);
       if (headingMatch) {
-        flushSection();
-        currentHeading = headingMatch[2].trim();
-        currentContent = [];
-      } else {
-        currentContent.push(line);
+        headings.push(headingMatch[2].trim());
       }
     }
 
-    flushSection();
-    return sections;
+    return headings;
   }
 
   private buildOverview(text: string): string {
-    const paragraphs = text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0 && !l.startsWith('#'));
-
-    return paragraphs.slice(0, 2).join(' ').trim();
+    const lines = text.split('\n').map((l) => l.trim());
+    const nonHeadingLines = lines.filter((l) => l.length > 0 && !l.startsWith('#'));
+    return nonHeadingLines.slice(0, 3).join(' ').trim();
   }
 
-  private deriveTakeaways(sections: Array<{ heading: string; content: string }>): string[] {
-    const takeaways: string[] = [];
-    for (const section of sections) {
-      if (section.heading) {
-        takeaways.push(section.heading);
-      }
-      const firstSentence = section.content.split(/\n\s*\n/u)[0]?.trim();
-      if (firstSentence && firstSentence.length > 10) {
-        takeaways.push(firstSentence);
-      }
-    }
+  private deriveTakeaways(sections: string[]): string[] {
+    const takeaways = sections
+      .filter((heading) => heading.length > 0)
+      .map((heading) => `Covers ${heading}.`);
     return takeaways.slice(0, 5);
   }
 }

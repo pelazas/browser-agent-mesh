@@ -134,11 +134,11 @@ describe('SynthesizerAgent', () => {
         status: 'completed',
         result: {
           type: 'reduce_result',
-          sourceType: 'scrape',
+          sourceType: 'scrape_result',
           title: 'Cloud design patterns, architectures, and implementations',
           summary: 'This guide explains modernization design patterns on AWS.',
           sections: ['Anti-corruption layer pattern', 'Circuit breaker pattern'],
-          takeaways: ['Discusses migration patterns.'],
+          takeaways: ['Covers Anti-corruption layer pattern.', 'Covers Circuit breaker pattern.'],
           confidence: 0.85,
         },
       },
@@ -164,8 +164,8 @@ describe('SynthesizerAgent', () => {
     expect(result.type).toBe('synthesis_result');
     expect(result.content).toContain('This guide explains modernization design patterns on AWS.');
     expect(result.content).toContain('Anti-corruption layer pattern');
-    expect(result.content).toContain('Discusses migration patterns.');
-    expect(result.content).toContain('"type":"scrape_result"');
+    expect(result.content).toContain('Covers Anti-corruption layer pattern.');
+    expect(result.content).not.toContain('"type":"scrape_result"');
     expect(result.content).not.toContain('"type":"reduce_result"');
   });
 });

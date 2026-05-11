@@ -48,7 +48,19 @@ function formatReduceResult(content: unknown): string | null {
 export async function consolidate(outputs: FragmentOutput[]): Promise<string> {
   log.info('consolidating outputs', { count: outputs.length });
 
-  const sorted = [...outputs].sort((a, b) => b.confidence - a.confidence);
+  const hasReduceResult = outputs.some((o) => {
+    const content = o.content;
+    return typeof content === 'object' && content !== null && (content as { type?: unknown }).type === 'reduce_result';
+  });
+
+  const filtered = hasReduceResult
+    ? outputs.filter((o) => {
+        const content = o.content;
+        return !(typeof content === 'object' && content !== null && (content as { type?: unknown }).type === 'scrape_result');
+      })
+    : outputs;
+
+  const sorted = [...filtered].sort((a, b) => b.confidence - a.confidence);
 
   const parts = sorted.map((o) => {
     const formatted = formatReduceResult(o.content);

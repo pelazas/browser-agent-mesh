@@ -231,10 +231,10 @@ Common fragment payload written by node workers for reduced scrape results:
 ```ts
 interface ReduceResultFragment {
   type: 'reduce_result';
-  sourceType: 'scrape';
-  title: string;
+  sourceType: 'scrape_result';
+  title: string | null;
   summary: string;
-  sections: Array<{ heading: string; content: string }>;
+  sections: string[];
   takeaways: string[];
   confidence: number;
 }
