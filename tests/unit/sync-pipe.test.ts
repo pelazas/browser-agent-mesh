@@ -114,4 +114,44 @@ describe('WorkerSyncProvider sync pipe timing', () => {
     // Should still work because onmessage is set before start()
     expect(agentDoc.getMap('root').get('test')).toBe('value');
   });
+
+  it('syncs already-present local state when connecting after doc hydration', () => {
+    const sharedDoc = new Y.Doc();
+    let handler: ((e: MessageEvent) => void) | null = null;
+
+    const mockPort = {
+      start: vi.fn(),
+      close: vi.fn(),
+      get onmessage() {
+        return handler;
+      },
+      set onmessage(fn: ((e: MessageEvent) => void) | null) {
+        handler = fn;
+      },
+      postMessage: vi.fn((message: { type: string; payload: unknown }) => {
+        if (message.type === 'connect') {
+          handler?.({
+            data: {
+              type: 'connect_ack',
+              payload: { stateVector: Y.encodeStateAsUpdate(sharedDoc) },
+            },
+          } as MessageEvent);
+          return;
+        }
+
+        if (message.type === 'sync_update') {
+          const payload = message.payload as { update: Uint8Array };
+          Y.applyUpdate(sharedDoc, payload.update);
+        }
+      }),
+    } as unknown as MessagePort;
+
+    const mainDoc = new Y.Doc();
+    mainDoc.getMap('root').set('workflowId', 'wf-1');
+
+    const provider = new WorkerSyncProvider(mainDoc, mockPort);
+    provider.connect('ui-main-thread', 'ui');
+
+    expect(sharedDoc.getMap('root').get('workflowId')).toBe('wf-1');
+  });
 });

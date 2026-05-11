@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { createRootDoc, getRootMap } from './root-doc';
+import { createRootDoc } from './root-doc';
 import type { SyncDebugState } from '@core/network/sync';
 
 export type WorkerMessageType =
@@ -89,6 +89,13 @@ export class WorkerSyncProvider {
       type: 'connect',
       payload: { nodeId, role },
     } satisfies ConnectMessage);
+
+    // Push the current local snapshot immediately so peers do not depend on a
+    // future mutation to discover state that already existed before connect().
+    this.port.postMessage({
+      type: 'sync_update',
+      payload: { update: Y.encodeStateAsUpdate(this.doc) },
+    } satisfies SyncUpdateMessage);
   }
 
   observe(path: string, callback: (value: unknown) => void): void {
@@ -139,7 +146,7 @@ export class WorkerSyncProvider {
         break;
       }
       case 'claim_ack': {
-        const ack = msg as ClaimAckMessage;
+        void (msg as ClaimAckMessage);
         break;
       }
       case 'peers_update': {
