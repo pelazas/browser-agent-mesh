@@ -165,7 +165,7 @@ describe('SynthesizerAgent', () => {
     expect(result.content).toContain('This guide explains modernization design patterns on AWS.');
     expect(result.content).toContain('Anti-corruption layer pattern');
     expect(result.content).toContain('Discusses migration patterns.');
-    expect(result.content).not.toContain('{"type":"scrape_result"');
-    expect(result.content).not.toContain('{"type":"reduce_result"');
+    expect(result.content).not.toContain('"type":"scrape_result"');
+    expect(result.content).not.toContain('"type":"reduce_result"');
   });
 });
