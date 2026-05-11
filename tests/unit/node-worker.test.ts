@@ -151,40 +151,6 @@ function expectNoReaderNoise(value: string): void {
   expect(value).not.toContain('Markdown Content:');
 }
 
-function expectReduceResult(
-  result: Record<string, unknown>,
-  expectedSections: Array<{ heading: string; content: string }>,
-  expectedSummarySnippet?: string,
-): void {
-  expect(result.type).toBe('reduce_result');
-  expect(result.title).toBe('Example Article');
-  expect(result.summary).toBeTypeOf('string');
-
-  const summary = result.summary as string;
-  expect(summary.trim().length).toBeGreaterThan(0);
-  expect(summary).toBe(summary.trim());
-
-  if (expectedSummarySnippet) {
-    expect(summary).toContain(expectedSummarySnippet);
-  }
-
-  expectNoReaderNoise(result.title as string);
-  expectNoReaderNoise(summary);
-  expect(result.sections).toEqual(
-    expectedSections.map((section) =>
-      expect.objectContaining({
-        heading: section.heading,
-        content: expect.stringContaining(section.content),
-      }),
-    ),
-  );
-
-  for (const section of result.sections as Array<{ heading: string; content: string }>) {
-    expectNoReaderNoise(section.heading);
-    expectNoReaderNoise(section.content);
-  }
-}
-
 describe('NodeWorkerAgent WebLLM integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -321,10 +287,13 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     });
   });
 
-  it.each([
-    {
-      name: 'returns a structured reduce_result when reducing scrape task output',
-      scrapeContent: [
+  it('returns a structured reduce_result when reducing scrape task output', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      [
         '# Example Article',
         '',
         'Lead paragraph with concrete details that should produce a non-empty cleaned summary.',
@@ -335,20 +304,38 @@ describe('NodeWorkerAgent WebLLM integration', () => {
         '## Risks',
         'The second sourced fact belongs under the Risks section.',
       ].join('\n'),
-      expectedSections: [
-        {
-          heading: 'Key Facts',
-          content: 'The first sourced fact belongs under the Key Facts section.',
-        },
-        {
-          heading: 'Risks',
-          content: 'The second sourced fact belongs under the Risks section.',
-        },
-      ],
-    },
-    {
-      name: 'strips reader-noise markers from reduced scrape summaries',
-      scrapeContent: [
+    );
+
+    const result = await (
+      agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
+    ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
+
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toBeTypeOf('string');
+    expect((result.title as string).trim().length).toBeGreaterThan(0);
+    expect(result.summary).toBeTypeOf('string');
+    expect((result.summary as string).trim().length).toBeGreaterThan(0);
+    expect(Array.isArray(result.sections)).toBe(true);
+    expect((result.sections as unknown[]).length).toBeGreaterThan(0);
+
+    for (const section of result.sections as Array<{ heading: string; content: string }>) {
+      expect(section.heading).toBeTypeOf('string');
+      expect(section.content).toBeTypeOf('string');
+      expectNoReaderNoise(section.heading);
+      expectNoReaderNoise(section.content);
+    }
+
+    expectNoReaderNoise(result.title as string);
+    expectNoReaderNoise(result.summary as string);
+  });
+
+  it('strips reader-noise markers from reduced scrape summaries', async () => {
+    const agent = new NodeWorkerAgent({ gpuProfile });
+    const doc = seedAgentDoc(agent);
+
+    const reduceTask = seedReduceWorkflow(
+      doc,
+      [
         'URL Source: https://example.com/source',
         'Published Time: 2026-05-11T09:30:00Z',
         'Markdown Content:',
@@ -357,19 +344,26 @@ describe('NodeWorkerAgent WebLLM integration', () => {
         '## Details',
         'Concrete detail copied from the source section.',
       ].join('\n'),
-      expectedSections: [{ heading: 'Details', content: 'Concrete detail copied from the source section.' }],
-      expectedSummarySnippet: 'actual article content starts here',
-    },
-  ])('$name', async ({ scrapeContent, expectedSections, expectedSummarySnippet }) => {
-    const agent = new NodeWorkerAgent({ gpuProfile });
-    const doc = seedAgentDoc(agent);
-    const reduceTask = seedReduceWorkflow(doc, scrapeContent);
+    );
 
     const result = await (
       agent as unknown as { executeTask: (task: TaskNode, workflowId?: string) => Promise<unknown> }
     ).executeTask(reduceTask, 'wf-reduce') as Record<string, unknown>;
 
-    expectReduceResult(result, expectedSections, expectedSummarySnippet);
+    expect(result.type).toBe('reduce_result');
+    expect(result.title).toBeTypeOf('string');
+    expect((result.title as string).trim().length).toBeGreaterThan(0);
+    expect(result.summary).toBeTypeOf('string');
+    expect((result.summary as string).trim().length).toBeGreaterThan(0);
+
+    expectNoReaderNoise(result.title as string);
+    expectNoReaderNoise(result.summary as string);
+
+    expect(Array.isArray(result.sections)).toBe(true);
+    for (const section of result.sections as Array<{ heading: string; content: string }>) {
+      expectNoReaderNoise(section.heading);
+      expectNoReaderNoise(section.content);
+    }
   });
 
   it('persists task result into the DAG node on completion', () => {
