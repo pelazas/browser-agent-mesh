@@ -57,6 +57,7 @@ body {
   gap: 8px;
   font-size: 0.875rem;
   color: var(--text-secondary);
+  position: relative;
 }
 
 .app__status-dot {
@@ -147,6 +148,108 @@ body {
   margin-top: 4px;
   color: var(--text-secondary);
   font-size: 0.75rem;
+}
+
+/* PeerPopover */
+.peer-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  min-width: 380px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  padding: 12px;
+}
+
+.peer-popover::-webkit-scrollbar {
+  width: 6px;
+}
+
+.peer-popover::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.peer-popover__summary {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.peer-popover__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+}
+
+.peer-popover__table th {
+  text-align: left;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.peer-popover__table td {
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.peer-popover__row--idle td { color: var(--text-primary); }
+.peer-popover__row--busy td { color: var(--text-primary); }
+.peer-popover__row--busy .peer-popover__cell-status { color: var(--warning); }
+.peer-popover__row--idle .peer-popover__cell-status { color: var(--text-secondary); }
+.peer-popover__row--offline { opacity: 0.4; }
+
+.peer-popover__cell-role {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.peer-popover__cell-id {
+  font-family: monospace;
+  color: var(--text-secondary);
+}
+
+.peer-popover__cell-status {
+  text-transform: uppercase;
+  font-size: 0.6rem;
+}
+
+.peer-popover__cell-gpu,
+.peer-popover__cell-models {
+  font-family: monospace;
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+}
+
+.peer-popover__models {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.peer-popover__model-badge {
+  font-size: 0.6rem;
+  font-family: monospace;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
 }
 
 /* PromptInput */
