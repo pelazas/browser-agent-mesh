@@ -112,4 +112,60 @@ describe('SynthesizerAgent', () => {
     expect(workflow.get('result')).toBeNull();
     expect(workflow.get('error')).toBe('Workflow is ready for synthesis but no completed task results were found');
   });
+
+  it('formats reduce_result summary sections instead of dumping raw scrape JSON', async () => {
+    const doc = createRootDoc();
+    const workflow = seedWorkflow(doc, 'wf-scrape-reduce', [
+      {
+        id: 'task-scrape',
+        status: 'completed',
+        result: {
+          type: 'scrape_result',
+          url: 'https://docs.aws.amazon.com/whitepapers/latest/modernization-design-patterns/modernization-design-patterns.html',
+          contentType: 'text/html',
+          format: 'html',
+          content: '<html><body>Raw HTML content</body></html>',
+          bytes: 2048,
+          selector: null,
+        },
+      },
+      {
+        id: 'task-reduce',
+        status: 'completed',
+        result: {
+          type: 'reduce_result',
+          sourceType: 'scrape',
+          title: 'Cloud design patterns, architectures, and implementations',
+          summary: 'This guide explains modernization design patterns on AWS.',
+          sections: ['Anti-corruption layer pattern', 'Circuit breaker pattern'],
+          takeaways: ['Discusses migration patterns.'],
+          confidence: 0.85,
+        },
+      },
+    ]);
+
+    const edges = workflow.get('edges') as Y.Array<unknown>;
+    edges.push([{ id: 'edge-1', source: 'task-scrape', target: 'task-reduce', type: 'sequential' }]);
+
+    const agent = new SynthesizerAgent(doc);
+    await (
+      agent as unknown as { checkForReadyWorkflows: () => Promise<void> }
+    ).checkForReadyWorkflows();
+
+    expect(workflow.get('state')).toBe('completed');
+
+    const result = workflow.get('result') as {
+      type: string;
+      content: string;
+      fragments: Array<{ taskId: string; content: unknown; confidence: number }>;
+      metadata: { totalCompletedTasks: number; fragmentCount: number };
+    };
+
+    expect(result.type).toBe('synthesis_result');
+    expect(result.content).toContain('This guide explains modernization design patterns on AWS.');
+    expect(result.content).toContain('Anti-corruption layer pattern');
+    expect(result.content).toContain('Discusses migration patterns.');
+    expect(result.content).not.toContain('{"type":"scrape_result"');
+    expect(result.content).not.toContain('{"type":"reduce_result"');
+  });
 });
