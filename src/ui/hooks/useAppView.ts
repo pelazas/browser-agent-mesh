@@ -6,6 +6,7 @@ interface MeshNodeUI {
   status: string;
   gpu?: string;
   tasks?: number;
+  models: string[];
 }
 
 interface MetricsEntryUI {
@@ -185,6 +186,9 @@ export function useAppView({
         status: (data.status as string) ?? 'offline',
         gpu: data.gpu ? `${(data.gpu as Record<string, number>)?.vramEstimateMB}MB` : undefined,
         tasks: Array.isArray(data.tasks) ? (data.tasks as unknown[]).length : undefined,
+        models: Array.isArray((data.gpu as Record<string, unknown> | null)?.compatibleModels)
+          ? (data.gpu as Record<string, unknown>).compatibleModels as string[]
+          : [],
       });
     });
     return result;
