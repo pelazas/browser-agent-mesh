@@ -212,7 +212,7 @@ export class NodeWorkerAgent extends BaseAgent {
           type: 'reduce_result',
           sourceType: 'scrape_result',
           title: llmSummary.title,
-          summary: llmSummary.summary,
+          description: llmSummary.description,
           sections: llmSummary.sections,
           takeaways: llmSummary.takeaways,
           confidence: DEFAULT_REDUCE_CONFIDENCE,
@@ -221,14 +221,14 @@ export class NodeWorkerAgent extends BaseAgent {
 
       const title = this.deriveDocumentTitle(cleanedText);
       const sections = this.deriveSectionHeadings(cleanedText);
-      const summary = this.buildOverview(cleanedText);
+      const description = this.buildOverview(cleanedText);
       const takeaways = this.deriveTakeaways(sections);
 
       return {
         type: 'reduce_result',
         sourceType: 'scrape_result',
         title,
-        summary,
+        description,
         sections,
         takeaways,
         confidence: DEFAULT_REDUCE_CONFIDENCE,
@@ -362,7 +362,7 @@ export class NodeWorkerAgent extends BaseAgent {
 
   private async summarizeWithLlm(text: string): Promise<{
     title: string | null;
-    summary: string;
+    description: string;
     sections: string[];
     takeaways: string[];
   } | null> {
@@ -383,8 +383,9 @@ export class NodeWorkerAgent extends BaseAgent {
         'You are a document summarizer. Read the text below and return ONLY a JSON object',
         'with this exact shape (no markdown code blocks, no extra text):',
         '',
-        '{"title":"...","summary":"2-3 paragraph overview","sections":["Key topic 1",...],"takeaways":["Notable insight 1",...]}',
+        '{"title":"...","description":"1 paragraph explaining what this document says","sections":["Key topic 1",...],"takeaways":["Notable insight 1",...]}',
         '',
+        'The description should be a single paragraph that clearly explains what the document is about and what it covers.',
         'Keep sections and takeaways concise. Limit sections to 6 items and takeaways to 5 items.',
         '',
         'Document text:',
@@ -420,7 +421,7 @@ export class NodeWorkerAgent extends BaseAgent {
 
   private tryParseSummaryJson(raw: string): {
     title: string | null;
-    summary: string;
+    description: string;
     sections: string[];
     takeaways: string[];
   } | null {
@@ -430,7 +431,7 @@ export class NodeWorkerAgent extends BaseAgent {
       const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
       const title = typeof parsed.title === 'string' ? parsed.title : null;
-      const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      const description = typeof parsed.description === 'string' ? parsed.description : '';
       const sections = Array.isArray(parsed.sections)
         ? parsed.sections.filter((s): s is string => typeof s === 'string')
         : [];
@@ -438,7 +439,7 @@ export class NodeWorkerAgent extends BaseAgent {
         ? parsed.takeaways.filter((s): s is string => typeof s === 'string')
         : [];
 
-      return { title, summary, sections, takeaways };
+      return { title, description, sections, takeaways };
     } catch {
       return null;
     }

@@ -16,26 +16,26 @@ function formatReduceResult(content: unknown): string | null {
   ) {
     const r = content as {
       title?: string;
-      summary?: string;
+      description?: string;
       sections?: string[];
       takeaways?: string[];
     };
 
     const parts: string[] = [];
     if (r.title) {
-      parts.push(`# ${r.title}`);
+      parts.push(`# **${r.title}**`);
     }
-    if (r.summary) {
-      parts.push(r.summary);
+    if (r.description) {
+      parts.push(r.description);
     }
     if (r.sections && r.sections.length > 0) {
-      parts.push('## Key Sections');
+      parts.push('## **Key Sections**');
       for (const section of r.sections) {
-        parts.push(`- ${section}`);
+        parts.push(`- **${section}**`);
       }
     }
     if (r.takeaways && r.takeaways.length > 0) {
-      parts.push('## Notable Takeaways');
+      parts.push('## **Notable Takeaways**');
       for (const takeaway of r.takeaways) {
         parts.push(`- ${takeaway}`);
       }

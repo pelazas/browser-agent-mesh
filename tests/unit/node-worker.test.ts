@@ -313,8 +313,8 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBeTypeOf('string');
     expect((result.title as string).trim().length).toBeGreaterThan(0);
-    expect(result.summary).toBeTypeOf('string');
-    expect((result.summary as string).trim().length).toBeGreaterThan(0);
+    expect(result.description).toBeTypeOf('string');
+    expect((result.description as string).trim().length).toBeGreaterThan(0);
     expect(Array.isArray(result.sections)).toBe(true);
     expect((result.sections as unknown[]).length).toBeGreaterThan(0);
 
@@ -324,7 +324,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     }
 
     expectNoReaderNoise(result.title as string);
-    expectNoReaderNoise(result.summary as string);
+    expectNoReaderNoise(result.description as string);
   });
 
   it('strips reader-noise markers from reduced scrape summaries', async () => {
@@ -351,11 +351,11 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBeTypeOf('string');
     expect((result.title as string).trim().length).toBeGreaterThan(0);
-    expect(result.summary).toBeTypeOf('string');
-    expect((result.summary as string).trim().length).toBeGreaterThan(0);
+    expect(result.description).toBeTypeOf('string');
+    expect((result.description as string).trim().length).toBeGreaterThan(0);
 
     expectNoReaderNoise(result.title as string);
-    expectNoReaderNoise(result.summary as string);
+    expectNoReaderNoise(result.description as string);
 
     expect(Array.isArray(result.sections)).toBe(true);
     for (const heading of result.sections as string[]) {
@@ -403,7 +403,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     mockedGetEngineStatus.mockReturnValue('ready');
     mockedGetCurrentModel.mockReturnValue('Llama-3.2-3B-Instruct-q4f32_1-MLC');
     mockedChatStream.mockResolvedValue({
-      message: { role: 'assistant', content: '{"title":"AWS Cloud Patterns","summary":"Guide to AWS design patterns.","sections":["Anti-corruption","Circuit breaker"],"takeaways":["Use patterns for reliability."]}' },
+      message: { role: 'assistant', content: '{"title":"AWS Cloud Patterns","description":"Guide to AWS design patterns.","sections":["Anti-corruption","Circuit breaker"],"takeaways":["Use patterns for reliability."]}' },
       tokensGenerated: 50,
       tokensPerSec: 25,
     });
@@ -430,7 +430,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(mockedChatStream).toHaveBeenCalledTimes(1);
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBe('AWS Cloud Patterns');
-    expect(result.summary).toBe('Guide to AWS design patterns.');
+    expect(result.description).toBe('Guide to AWS design patterns.');
     expect(result.sections).toEqual(['Anti-corruption', 'Circuit breaker']);
     expect(result.takeaways).toEqual(['Use patterns for reliability.']);
   });
@@ -464,7 +464,7 @@ describe('NodeWorkerAgent WebLLM integration', () => {
     expect(mockedChatStream).toHaveBeenCalledTimes(1);
     expect(result.type).toBe('reduce_result');
     expect(result.title).toBeTypeOf('string');
-    expect(result.summary).toBeTypeOf('string');
+    expect(result.description).toBeTypeOf('string');
   });
 
   it('fails reduce tasks when scrape content is empty after cleanup', async () => {

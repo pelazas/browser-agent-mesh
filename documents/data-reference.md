@@ -233,7 +233,7 @@ interface ReduceResultFragment {
   type: 'reduce_result';
   sourceType: 'scrape_result';
   title: string | null;
-  summary: string;
+  description: string;
   sections: string[];
   takeaways: string[];
   confidence: number;
