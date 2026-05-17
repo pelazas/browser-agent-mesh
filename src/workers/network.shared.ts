@@ -3,8 +3,10 @@ import { createRootDoc } from '@core/blackboard/root-doc';
 import { SwarmNode } from '@core/network/swarm';
 import { MCPServer } from '@core/network/mcp/server';
 import { GossipTelemetry } from '@core/network/gossip';
+import type { MCPToolCall, MCPToolResult } from '@core/network/mcp/types';
 import { generateId } from '@utils/id';
 import { createLogger } from '@utils/logging';
+import { config } from '@/config';
 
 const log = createLogger('network-shared-worker');
 const sharedSelf = self as unknown as SharedWorkerGlobalScope;
@@ -22,6 +24,11 @@ const agentPorts: Map<string, AgentPort> = new Map();
 const pendingUpdates: Uint8Array[] = [];
 const MAX_PENDING_UPDATES = 100;
 
+// Queue for MessagePorts that connect before init() finishes.
+// The first port in this queue receives the 'shared_worker_ready' signal.
+const pendingPorts: MessagePort[] = [];
+let isReady = false;
+
 const nodeId = generateId();
 const doc: Y.Doc = createRootDoc();
 
@@ -30,7 +37,7 @@ const gossiper = new GossipTelemetry({
   nodeId,
 });
 
-void new MCPServer();
+const mcpServer = new MCPServer();
 
 let swarm: SwarmNode | null = null;
 
@@ -51,7 +58,44 @@ async function init(): Promise<void> {
 
   gossiper.start();
 
+  swarm = new SwarmNode({
+    signalingUrl: config.signalingUrl,
+    bootstrapPeers: [],
+  });
+  await swarm.start();
+
+  log.info('swarm node started', { peerId: swarm.getPeerId() });
+
+  swarm.handleMCPStream(async (data: Uint8Array, _peerId: string): Promise<Uint8Array> => {
+    const call: MCPToolCall = JSON.parse(new TextDecoder().decode(data)) as MCPToolCall;
+    const result: MCPToolResult = await mcpServer.handleToolCall(call);
+    return new TextEncoder().encode(JSON.stringify(result));
+  });
+
   log.info('network shared worker initialized');
+
+  // Mark as ready and signal the first queued port (the UI main thread).
+  isReady = true;
+
+  // Process any ports that connected while init() was running.
+  const queuedPorts = pendingPorts.splice(0, pendingPorts.length);
+  for (let i = 0; i < queuedPorts.length; i++) {
+    const port = queuedPorts[i];
+    if (i === 0) {
+      // First port is the UI main thread — send the ready signal.
+      port.postMessage({ type: 'shared_worker_ready', payload: { nodeId } });
+      port.start();
+      log.info('sent ready signal to UI main thread');
+    } else {
+      // Subsequent ports are normal agent connections.
+      let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      handleAgentPort(port, agentNodeId, 'agent');
+      port.postMessage({
+        type: 'connect_ack',
+        payload: { stateVector: Y.encodeStateAsUpdate(doc) },
+      });
+    }
+  }
 }
 
 sharedSelf.onconnect = (e: MessageEvent) => {
@@ -60,6 +104,13 @@ sharedSelf.onconnect = (e: MessageEvent) => {
 
   log.info('new connection to shared worker', { portsAvailable: e.ports.length });
 
+  if (!isReady) {
+    // init() hasn't finished yet — queue this port for later.
+    pendingPorts.push(port);
+    return;
+  }
+
+  // SharedWorker is ready: normal connection handling.
   let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
   handleAgentPort(port, agentNodeId, 'agent');
