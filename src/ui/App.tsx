@@ -5,6 +5,7 @@ import { TelemetryPanel } from '@ui/components/TelemetryPanel';
 import { WorkflowView } from '@ui/components/WorkflowView';
 import { BlackboardDebugger } from '@ui/components/BlackboardDebugger';
 import { PeerPopover } from '@ui/components/PeerPopover';
+import HITLDialog from '@ui/components/HITLDialog';
 import { usePeerPopover } from '@ui/components/usePeerPopover';
 import { useBlackboard } from '@ui/hooks/useBlackboard';
 import { useAppView } from '@ui/hooks/useAppView';
@@ -69,6 +70,7 @@ export const App: React.FC = () => {
           <BlackboardDebugger />
         </div>
       </div>
+      <HITLDialog />
     </div>
   );
 };
