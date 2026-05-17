@@ -50,21 +50,19 @@ export async function appendEvent(entry: Omit<EventEntry, 'id'>): Promise<string
   const db = await initDatabase();
   const id = crypto.randomUUID();
 
-  db.run(
+  const stmt = db.prepare(
     `INSERT INTO event_log (id, timestamp, type, node_id, workflow_id, payload, ydoc_update)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    {
-      bind: [
-        id,
-        entry.timestamp,
-        entry.type,
-        entry.nodeId,
-        entry.workflowId,
-        JSON.stringify(entry.payload),
-        entry.ydocUpdate ?? null,
-      ],
-    },
   );
+  stmt.bind([
+    id,
+    entry.timestamp,
+    entry.type,
+    entry.nodeId,
+    entry.workflowId,
+    JSON.stringify(entry.payload),
+    entry.ydocUpdate ?? null,
+  ]).stepFinalize();
 
   return id;
 }
@@ -74,7 +72,7 @@ export function getEvents(
   opts: { type?: EventType; workflowId?: string; limit?: number; offset?: number },
 ): EventEntry[] {
   const conditions: string[] = [];
-  const bind: unknown[] = [];
+  const bind: (string | number | null)[] = [];
 
   if (opts.type) {
     conditions.push('type = ?');
@@ -94,7 +92,7 @@ export function getEvents(
      FROM event_log ${where}
      ORDER BY timestamp DESC
      LIMIT ? OFFSET ?`,
-    { bind: [...bind, limit, offset] },
+    [...bind, limit, offset],
   );
 
   return rows.map((row) => ({

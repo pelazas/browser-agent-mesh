@@ -31,7 +31,7 @@ export class GossipTelemetry {
     };
   }
 
-  subscribeFromGossipSub(onMessage: (data: Uint8Array) => void): void {
+  subscribeFromGossipSub(_onMessage: (data: Uint8Array) => void): void {
     // Called by GossipSub incoming handler
   }
 

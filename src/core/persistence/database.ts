@@ -33,15 +33,10 @@ export async function initDatabase(): Promise<Database> {
 
   const sqlite3 = await import('@sqlite.org/sqlite-wasm');
 
-  const sqlite = await sqlite3.default({
-    locateFile: (_path: string) => '/node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
-    init: (api: unknown) => {
-      log.info('sqlite wasm initialized');
-    },
-  });
+  const sqlite = await sqlite3.default();
 
-  const opfs = await sqlite.installOpfsSAHPoolVfs();
-  log.info('opfs pool installed', { metrics: opfs.metrics });
+  await sqlite.installOpfsSAHPoolVfs({});
+  log.info('opfs pool installed');
 
   db = new sqlite.oo1.OpfsDb('/bam-mesh.db', 'c');
   db.exec('PRAGMA journal_mode=WAL;');

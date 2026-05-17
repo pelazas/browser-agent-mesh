@@ -105,7 +105,7 @@ export class YjsSyncProvider {
       this.debugState.awarenessStates = states.size;
       let remoteCount = 0;
       const remoteIds: number[] = [];
-      states.forEach((state, clientId) => {
+      states.forEach((_state, clientId) => {
         if (clientId !== this.doc.clientID) {
           remoteCount++;
           remoteIds.push(clientId);
@@ -161,9 +161,9 @@ export class YjsSyncProvider {
     this.provider.awareness.setLocalState({ ...state, [key]: value });
   }
 
-  getRemoteState(nodeId: string): unknown {
+  getRemoteState(_nodeId: string): unknown {
     const states = this.provider.awareness.getStates();
-    return states.get(nodeId);
+    return states.get(Number(_nodeId));
   }
 
   getAllStates(): Map<number, unknown> {
@@ -183,4 +183,3 @@ export class YjsSyncProvider {
     this.doc.destroy();
   }
 }
-

@@ -2,7 +2,7 @@ import * as Y from 'yjs';
 
 type PathWatcher = {
   paths: string[];
-  callback: (events: Y.YEvent<unknown>[]) => void;
+  callback: (events: Y.YEvent<Y.AbstractType<any>>[]) => void;
   filter?: (value: unknown) => boolean;
 };
 
@@ -17,7 +17,7 @@ export class BlackboardObserver {
 
   watch(
     path: string,
-    callback: (events: Y.YEvent<unknown>[]) => void,
+    callback: (events: Y.YEvent<Y.AbstractType<any>>[]) => void,
     opts?: { filter?: (value: unknown) => boolean },
   ): () => void {
     const rootKey = this.getRootKey(path);
@@ -26,17 +26,18 @@ export class BlackboardObserver {
       this.watchers.set(rootKey, []);
 
       const root = this.doc.getMap(rootKey);
-      const unsubscribe = root.observe((events, transaction) => {
-        // Pass through all events; filtering happens per-watcher
+      // Yjs observe() returns void in current version; store the callback so we can unobserve
+      const handler = (event: Y.YMapEvent<unknown>) => {
         const watchers = this.watchers.get(rootKey) ?? [];
         for (const w of watchers) {
-          if (this.matchesPath(path, events)) {
-            w.callback(events);
+          if (this.matchesPath(path, [event])) {
+            w.callback([event] as unknown as Y.YEvent<Y.AbstractType<any>>[]);
           }
         }
-      });
+      };
+      root.observe(handler);
 
-      this.unsubscribeMap.set(rootKey, unsubscribe);
+      this.unsubscribeMap.set(rootKey, () => root.unobserve(handler));
     }
 
     const watcher: PathWatcher = { paths: path.split('.'), callback, filter: opts?.filter };
@@ -51,7 +52,7 @@ export class BlackboardObserver {
     return path.split('.')[0];
   }
 
-  private matchesPath(path: string, events: Y.YEvent<unknown>[]): boolean {
+  private matchesPath(path: string, events: Y.YEvent<Y.AbstractType<any>>[]): boolean {
     const parts = path.split('.');
     for (const event of events) {
       const eventPath = this.getEventPath(event);
@@ -60,18 +61,15 @@ export class BlackboardObserver {
     return false;
   }
 
-  private getEventPath(event: Y.YEvent<unknown>): string[] {
+  private getEventPath(event: Y.YEvent<Y.AbstractType<any>>): string[] {
     const path: string[] = [];
-    // Walk up the Yjs parent chain
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let current: any = event.target;
     while (current) {
       if (current instanceof Y.Map) {
-        // Find the key we came from
         const parent = current.doc ? this.findKeyInParent(current) : null;
         if (parent) path.unshift(parent);
       } else if (current instanceof Y.Array) {
-        // Find the key we came from
         const parent = this.findKeyInParent(current);
         if (parent) path.unshift(parent);
       }
@@ -80,8 +78,7 @@ export class BlackboardObserver {
     return path;
   }
 
-  private findKeyInParent(child: Y.AbstractType<unknown>): string | null {
-    // Search through the doc's top-level maps
+  private findKeyInParent(child: Y.AbstractType<any>): string | null {
     for (const [name, type] of this.doc.share.entries()) {
       if (type === child) return name;
     }

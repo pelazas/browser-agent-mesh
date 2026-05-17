@@ -29,13 +29,11 @@ export async function saveCheckpoint(
   const id = crypto.randomUUID();
   const state = Y.encodeStateAsUpdate(doc);
 
-  db.run(
+  const stmt = db.prepare(
     `INSERT INTO checkpoints (id, workflow_id, timestamp, doc_state)
      VALUES (?, ?, ?, ?)`,
-    {
-      bind: [id, workflowId, Date.now(), state],
-    },
   );
+  stmt.bind([id, workflowId, Date.now(), state]).stepFinalize();
 
   log.info('checkpoint saved', { workflowId });
   return id;
@@ -48,7 +46,7 @@ export async function loadLatestCheckpoint(workflowId: string): Promise<Uint8Arr
      WHERE workflow_id = ?
      ORDER BY timestamp DESC
      LIMIT 1`,
-    { bind: [workflowId] },
+    [workflowId],
   );
 
   if (rows.length === 0) return null;
@@ -57,7 +55,7 @@ export async function loadLatestCheckpoint(workflowId: string): Promise<Uint8Arr
 
 export async function pruneOldCheckpoints(workflowId: string, keep: number = 10): Promise<void> {
   const db = await initDatabase();
-  db.run(
+  const stmt = db.prepare(
     `DELETE FROM checkpoints
      WHERE id NOT IN (
        SELECT id FROM checkpoints
@@ -65,8 +63,8 @@ export async function pruneOldCheckpoints(workflowId: string, keep: number = 10)
        ORDER BY timestamp DESC
        LIMIT ?
      ) AND workflow_id = ?`,
-    { bind: [workflowId, keep, workflowId] },
   );
+  stmt.bind([workflowId, keep, workflowId]).stepFinalize();
 }
 
 export function startPeriodicCheckpoint(
