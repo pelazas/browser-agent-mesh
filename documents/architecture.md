@@ -12,7 +12,7 @@ A decentralized, P2P browser-based agent swarm. Multiple browser tabs collaborat
 
 3. **P2P Model Context Protocol (MCP)** — Agents expose their local capabilities (DOM access, OPFS files, network APIs) to the swarm using MCP over `libp2p` data channels.
 
-4. **Single Network SharedWorker per browser** — The libp2p swarm, Yjs WebRTC sync, and MCP server live in a single SharedWorker. Agent workers communicate with it via `MessagePort`. This prevents duplicate WebRTC connections.
+4. **Single Network SharedWorker per browser** — The libp2p swarm, MCP server, and gossip telemetry live in a single SharedWorker. The Yjs root document and WebRTC sync (y-webrtc) live in the main thread alongside the React UI for simplicity. Agent workers communicate with both via `MessagePort`. This prevents duplicate WebRTC connections.
 
 ---
 
@@ -73,25 +73,39 @@ User prompt → UI → Blackboard.promptRequests[requestId]
 
 ## Messaging Architecture
 
-```
-┌── Main Thread (UI) ───────────────────────────┐
-│  React App, Blackboard hooks                   │
-│  ┌──────────────────────────────────────┐     │
-│  │  Network SharedWorker (singleton)     │     │
-│  │  ├─ YjsSyncProvider (y-webrtc)       │     │
-│  │  ├─ Root Y.Doc                       │     │
-│  │  ├─ MCP Server                       │     │
-│  │  └─ GossipTelemetry                  │     │
-│  └──────┬──────┬──────┬──────┬─────────┘     │
-│    Port │ Port │ Port │ Port │                 │
-│    ┌────▼──┐ ┌─▼───┐┌▼────┐┌▼──────────┐     │
-│    │Sentinel│ │Node ││Bridge││Synthesizer│     │
-│    │ Worker │ │Worker││Worker││  Worker   │     │
-│    └────────┘ └─────┘└────┘└───────────┘     │
-└───────────────────────────────────────────────┘
+``` mermaid
+flowchart TB
+    subgraph MainThread ["Main Thread (UI)"]
+        React["React App, Blackboard hooks"]
+        YDoc["Root Y.Doc<br/>(Yjs)"]
+        YWebRTC["YjsSyncProvider<br/>(y-webrtc)"]
+        React --- YDoc
+        YDoc --- YWebRTC
+    end
+
+    subgraph SharedWorker ["Network SharedWorker (singleton)"]
+        Swarm["libp2p SwarmNode"]
+        MCP["MCP Server"]
+        Gossip["GossipTelemetry"]
+    end
+
+    subgraph Workers ["Agent Workers"]
+        Sentinel["Sentinel Worker"]
+        Node["Node Worker"]
+        Bridge["Bridge Worker"]
+        Synth["Synthesizer Worker"]
+    end
+
+    MainThread -- MessagePort --> SharedWorker
+    MainThread -- MessagePort --> Workers
+    SharedWorker -- MessagePort --> Workers
+
+    YWebRTC -. "WebRTC (other tabs)" .-> YWebRTC
 ```
 
-- **WorkerSyncProvider** (`src/core/blackboard/worker-provider.ts`) handles Yjs sync over MessagePort between agent workers and the Network SharedWorker.
+Each agent worker communicates with the main thread via `WorkerSyncProvider` (`src/core/blackboard/worker-provider.ts`) for Yjs sync over MessagePort, and with the SharedWorker for P2P networking (libp2p swarm, MCP tool execution).
+
+- **WorkerSyncProvider** (`src/core/blackboard/worker-provider.ts`) handles Yjs sync over MessagePort between agent workers and the main thread's root Y.Doc.
 - **y-webrtc** syncs the root Y.Doc between browser tabs via WebRTC data channels.
 - **Signaling server** (`signaling-server/`) is a WebSocket relay for y-webrtc peer discovery.
 
