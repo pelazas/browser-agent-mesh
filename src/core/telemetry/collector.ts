@@ -10,7 +10,6 @@ export class MetricsCollector {
   }
 
   async collect(gpuProfile: GPUProfile | null, peerCount: number): Promise<Metrics> {
-    const memory = this.measureMemory();
     const tokensPerSec = gpuProfile ? this.estimateTokensPerSec(gpuProfile) : null;
 
     return {
@@ -37,7 +36,7 @@ export class MetricsCollector {
     const current = this.measureMemory();
     const diff = current - this.baselineMemory;
     this.baselineMemory = current;
-    return Math.max(0, diff / (1024 * 1024)); // MB delta
+    return Math.max(0, diff / (1024 * 1024));
   }
 
   private estimateTokensPerSec(gpu: GPUProfile): number {

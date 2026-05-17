@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import type { LockEntry } from './schema';
-import { getLocks, getWorkflowDoc } from './root-doc';
+import { getWorkflowDoc } from './root-doc';
 import { generateId } from '@/utils/id';
 
 const DEFAULT_TTL_MS = 30_000;

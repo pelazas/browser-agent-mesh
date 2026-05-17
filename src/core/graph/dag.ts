@@ -52,7 +52,6 @@ export class DAG {
     this.outgoing.get(source)!.push(target);
     this.incoming.get(target)!.push(source);
 
-    // Update edge type if parallel edge connects
     this.updateNodeTypes(source, target, type);
 
     return id;
@@ -105,7 +104,7 @@ export class DAG {
     const groups: TaskNode[][] = [];
     const visited = new Set<string>();
 
-    for (const [id, node] of this.nodes) {
+    for (const [id, _node] of this.nodes) {
       if (visited.has(id)) continue;
       const successors = this.outgoing.get(id) ?? [];
       if (successors.length > 1) {
@@ -149,7 +148,7 @@ export class DAG {
 
     const visit = (nodeId: string) => {
       if (visited.has(nodeId)) return;
-      if (visiting.has(nodeId)) return; // cycle
+      if (visiting.has(nodeId)) return;
       visiting.add(nodeId);
 
       for (const succ of this.outgoing.get(nodeId) ?? []) {
@@ -161,7 +160,6 @@ export class DAG {
       order.unshift(nodeId);
     };
 
-    // Start from root or any node with no incoming edges
     const root = this.rootNodeId ?? this.findRoot();
     if (root) visit(root);
 

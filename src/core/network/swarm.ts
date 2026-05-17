@@ -8,6 +8,7 @@ import { kadDHT } from '@libp2p/kad-dht';
 import { gossipsub } from '@chainsafe/libp2p-gossipsub';
 import { createLogger } from '@utils/logging';
 import { GOSSIP_TOPIC } from './mcp/types';
+import type { PubSub } from '@libp2p/interface';
 
 const log = createLogger('swarm');
 
@@ -42,7 +43,7 @@ export class SwarmNode {
         }),
         webSockets(),
       ],
-      connectionEncrypters: [noise()],
+      connectionEncryption: [noise()],
       streamMuxers: [mplex()],
       peerDiscovery: [
         bootstrap({
@@ -55,24 +56,27 @@ export class SwarmNode {
       },
     });
 
-    this.node.addEventListener('peer:connect', (evt) => {
-      log.info('peer connected', { peer: evt.detail.toString() });
+    this.node.addEventListener('peer:connect', (evt: Event) => {
+      const detail = (evt as CustomEvent).detail;
+      log.info('peer connected', { peer: detail.toString() });
     });
 
-    this.node.addEventListener('peer:disconnect', (evt) => {
-      log.info('peer disconnected', { peer: evt.detail.toString() });
+    this.node.addEventListener('peer:disconnect', (evt: Event) => {
+      const detail = (evt as CustomEvent).detail;
+      log.info('peer disconnected', { peer: detail.toString() });
     });
 
-    // Subscribe to gossip topic
-    this.node.services.pubsub.subscribe(GOSSIP_TOPIC);
-    this.node.services.pubsub.addEventListener('message', (evt) => {
-      this.onGossipMessage?.(evt.detail.data);
+    const pubsub = this.node.services.pubsub as PubSub;
+    pubsub.subscribe(GOSSIP_TOPIC);
+    pubsub.addEventListener('message', (evt: Event) => {
+      const message = (evt as CustomEvent).detail;
+      this.onGossipMessage?.(message.data);
     });
 
     log.info('libp2p swarm started', { peerId: this.node.peerId.toString() });
   }
 
-  async stop(): void {
+  async stop(): Promise<void> {
     if (this.node) {
       await this.node.stop();
       this.node = null;
@@ -94,18 +98,18 @@ export class SwarmNode {
 
   async publishToGossip(data: Uint8Array): Promise<void> {
     if (!this.node) return;
-    await this.node.services.pubsub.publish(GOSSIP_TOPIC, data);
+    const pubsub = this.node.services.pubsub as PubSub;
+    await pubsub.publish(GOSSIP_TOPIC, data);
   }
 
   handleMCPStream(handler: (data: Uint8Array, peerId: string) => Promise<Uint8Array>): void {
     if (!this.node) return;
-    this.node.handle('/bam-mcp/1.0.0', async ({ stream }) => {
-      const reader = stream.source.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const response = await handler(value, stream.remotePeer.toString());
-        await stream.sink.write(response);
+    this.node.handle('/bam-mcp/1.0.0', async ({ stream, connection }) => {
+      const remotePeerId = connection.remotePeer.toString();
+      for await (const chunk of stream.source) {
+        const data = new Uint8Array(chunk.subarray(0, chunk.byteLength));
+        const response = await handler(data, remotePeerId);
+        await (stream.sink as (src: AsyncIterable<Uint8Array>) => Promise<void>)((async function* () { yield response; })());
       }
     });
   }
