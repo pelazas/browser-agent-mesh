@@ -16,6 +16,12 @@ case "${1:-native}" in
     echo "[setup] Installing root dependencies..."
     (cd "$ROOT_DIR" && npm install)
 
+    echo "[setup] Creating .env from .env.example (if not exists)..."
+    if [ ! -f "$ROOT_DIR/.env" ]; then
+      cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
+      echo "[setup] Created .env with defaults"
+    fi
+
     echo "[setup] Installing signaling server dependencies..."
     (cd "$ROOT_DIR/signaling-server" && npm install)
 
