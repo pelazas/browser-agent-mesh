@@ -11,6 +11,7 @@ import { initEventLog, captureYDocUpdate } from '@core/persistence/event-log';
 import { initCheckpoints, loadLatestCheckpoint, startPeriodicCheckpoint } from '@core/persistence/checkpoint';
 import { createLogger } from '@utils/logging';
 import { generateId } from '@utils/id';
+import type { HITLRequest, HITLResponse } from '@agents/synthesizer/hitl';
 
 const log = createLogger('main');
 
@@ -98,7 +99,20 @@ function bootstrapWorkers(): void {
         new URL('@workers/synthesizer.worker.ts', import.meta.url),
         { type: 'module', name: 'bam-synthesizer' },
       );
-      synthWorkerRef.onmessage = (e) => log.debug('synthesizer message', { data: e.data });
+      synthWorkerRef.onmessage = (e) => {
+        const data = e.data as { type: string; payload: unknown } | undefined;
+        if (data?.type === 'hitl_request') {
+          import('@ui/hooks/hitl-store').then(({ receiveHITLRequest }) => {
+            const request = (data.payload as HITLRequest);
+            const respond = (response: HITLResponse) => {
+              synthWorkerRef?.postMessage(response satisfies HITLResponse as unknown as Record<string, unknown>);
+            };
+            receiveHITLRequest(request, respond);
+          }).catch(() => log.warn('hitl handler not available'));
+        } else {
+          log.debug('synthesizer message', { data: e.data });
+        }
+      };
       log.info('synthesizer worker started');
     } catch (err) {
       log.error('failed to start synthesizer', { error: String(err) });
