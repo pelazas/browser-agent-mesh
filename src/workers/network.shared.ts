@@ -41,7 +41,7 @@ const mcpServer = new MCPServer();
 
 let swarm: SwarmNode | null = null;
 
-let msgCount = { received: 0, sent: 0, errors: 0 };
+const msgCount = { received: 0, sent: 0, errors: 0 };
 
 async function init(): Promise<void> {
   log.info('network shared worker starting', {
@@ -88,7 +88,7 @@ async function init(): Promise<void> {
       log.info('sent ready signal to UI main thread');
     } else {
       // Subsequent ports are normal agent connections.
-      let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       handleAgentPort(port, agentNodeId, 'agent');
       port.postMessage({
         type: 'connect_ack',
@@ -111,7 +111,7 @@ sharedSelf.onconnect = (e: MessageEvent) => {
   }
 
   // SharedWorker is ready: normal connection handling.
-  let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
   handleAgentPort(port, agentNodeId, 'agent');
 
