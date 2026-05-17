@@ -104,7 +104,7 @@ export class DAG {
     const groups: TaskNode[][] = [];
     const visited = new Set<string>();
 
-    for (const [id, _node] of this.nodes) {
+    for (const [id] of this.nodes) {
       if (visited.has(id)) continue;
       const successors = this.outgoing.get(id) ?? [];
       if (successors.length > 1) {

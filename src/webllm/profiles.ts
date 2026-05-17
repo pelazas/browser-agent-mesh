@@ -30,13 +30,13 @@ declare global {
   interface GPUBuffer {
     destroy(): void;
   }
-  interface GPUShaderModule {}
+  type GPUShaderModule = Record<string, never>;
   interface GPUComputePipeline {
     getBindGroupLayout(index: number): GPUBindGroupLayout;
   }
-  interface GPUBindGroupLayout {}
-  interface GPUPipelineLayout {}
-  interface GPUBindGroup {}
+  type GPUBindGroupLayout = Record<string, never>;
+  type GPUPipelineLayout = Record<string, never>;
+  type GPUBindGroup = Record<string, never>;
   interface GPUBindGroupEntry {
     binding: number;
     resource: { buffer: GPUBuffer };
@@ -51,7 +51,7 @@ declare global {
     dispatchWorkgroups(count: number): void;
     end(): void;
   }
-  interface GPUCommandBuffer {}
+  type GPUCommandBuffer = Record<string, never>;
   interface GPUQueue {
     writeBuffer(buffer: GPUBuffer, bufferOffset: number, data: ArrayBufferView, dataOffset?: number, size?: number): void;
     submit(commands: GPUCommandBuffer[]): void;

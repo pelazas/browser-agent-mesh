@@ -2,8 +2,9 @@ import * as Y from 'yjs';
 import { createRootDoc } from '@core/blackboard/root-doc';
 import { SwarmNode } from '@core/network/swarm';
 import { MCPServer } from '@core/network/mcp/server';
-import { GossipTelemetry } from '@core/network/gossip';
+import type { ToolDescriptor } from '@core/blackboard/schema';
 import type { MCPToolCall, MCPToolResult } from '@core/network/mcp/types';
+import { GossipTelemetry } from '@core/network/gossip';
 import { generateId } from '@utils/id';
 import { createLogger } from '@utils/logging';
 import { config } from '@/config';
@@ -41,7 +42,11 @@ const mcpServer = new MCPServer();
 
 let swarm: SwarmNode | null = null;
 
-let msgCount = { received: 0, sent: 0, errors: 0 };
+const msgCount = { received: 0, sent: 0, errors: 0 };
+
+// Pending MCP tool calls awaiting responses from agent workers.
+// Keyed by requestId, resolved when the agent sends tool_result back.
+const pendingToolCalls = new Map<string, { resolve: (value: unknown) => void; reject: (err: Error) => void }>();
 
 async function init(): Promise<void> {
   log.info('network shared worker starting', {
@@ -88,7 +93,7 @@ async function init(): Promise<void> {
       log.info('sent ready signal to UI main thread');
     } else {
       // Subsequent ports are normal agent connections.
-      let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       handleAgentPort(port, agentNodeId, 'agent');
       port.postMessage({
         type: 'connect_ack',
@@ -111,7 +116,7 @@ sharedSelf.onconnect = (e: MessageEvent) => {
   }
 
   // SharedWorker is ready: normal connection handling.
-  let agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const agentNodeId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
   handleAgentPort(port, agentNodeId, 'agent');
 
@@ -171,6 +176,39 @@ function handleAgentPort(port: MessagePort, tempId: string, defaultRole: string)
     }
 
     const senderId = registeredNodeId ?? tempId;
+
+    if (type === 'publish_tool') {
+      const { name, description, schema } = payload as { name: string; description: string; schema: Record<string, unknown> };
+      const toolId = `${senderId}:${name}`;
+      mcpServer.registerTool(
+        { id: toolId, name, description, ownerNodeId: senderId, schema } satisfies ToolDescriptor,
+        async (args: Record<string, unknown>) => {
+          const requestId = generateId();
+          return new Promise<unknown>((resolve, reject) => {
+            pendingToolCalls.set(requestId, { resolve, reject });
+            port.postMessage({ type: 'call_tool', payload: { name, arguments: args, requestId } });
+            log.info('forwarded MCP call to agent', { toolName: name, agentId: senderId, requestId });
+          });
+        },
+      );
+      log.info('tool registered via publish_tool', { toolName: name, agentId: senderId });
+      return;
+    }
+
+    if (type === 'tool_result') {
+      const { requestId, result, error } = payload as { requestId: string; result?: unknown; error?: string };
+      const pending = pendingToolCalls.get(requestId);
+      if (pending) {
+        pendingToolCalls.delete(requestId);
+        if (error) {
+          pending.reject(new Error(error));
+        } else {
+          pending.resolve(result);
+        }
+        log.info('MCP tool result received', { requestId, hasError: !!error });
+      }
+      return;
+    }
 
     if (type === 'sync_update') {
       const { update } = payload as { update: Uint8Array };

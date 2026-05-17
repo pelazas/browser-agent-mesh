@@ -63,6 +63,7 @@ export class WorkerSyncProvider {
   private pendingObserves: Map<string, (value: unknown) => void> = new Map();
   onPeersUpdate?: (count: number) => void;
   onDebugState?: (state: SyncDebugState) => void;
+  onToolCall?: (name: string, args: Record<string, unknown>, requestId: string) => void;
 
   constructor(doc: Y.Doc, port: MessagePort) {
     this.doc = doc;
@@ -120,6 +121,10 @@ export class WorkerSyncProvider {
     } satisfies WorkerMessage);
   }
 
+  sendToolResult(requestId: string, result: unknown, error?: string): void {
+    this.port.postMessage({ type: 'tool_result', payload: { requestId, result, error } } satisfies WorkerMessage);
+  }
+
   destroy(): void {
     this.port.close();
     this.pendingObserves.clear();
@@ -157,6 +162,11 @@ export class WorkerSyncProvider {
       case 'debug_state': {
         const d = msg as { type: 'debug_state'; payload: { state: SyncDebugState; workerNodeId: string; startTime: number; msgCount: unknown } };
         this.onDebugState?.(d.payload.state);
+        break;
+      }
+      case 'call_tool': {
+        const c = msg as { type: 'call_tool'; payload: { name: string; arguments: Record<string, unknown>; requestId: string } };
+        this.onToolCall?.(c.payload.name, c.payload.arguments, c.payload.requestId);
         break;
       }
     }

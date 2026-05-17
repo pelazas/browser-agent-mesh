@@ -103,11 +103,9 @@ export class YjsSyncProvider {
     awareness.on('update', () => {
       const states = awareness.getStates();
       this.debugState.awarenessStates = states.size;
-      let remoteCount = 0;
       const remoteIds: number[] = [];
       states.forEach((_state, clientId) => {
         if (clientId !== this.doc.clientID) {
-          remoteCount++;
           remoteIds.push(clientId);
         }
       });
