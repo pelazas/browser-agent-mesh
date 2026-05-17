@@ -194,6 +194,39 @@ Check: STUN reachable? Both tabs on same origin (localhost vs 127.0.0.1)?`;
   log.info('sync provider created in main thread', { room: roomName });
 }
 
+// Explicit ready/ack handshake: wait for the SharedWorker to signal it's ready
+// before transferring the UI port. Falls back to a timeout if the signal never arrives.
+const SHARED_WORKER_READY_TIMEOUT_MS = 5_000;
+let sharedWorkerReadyResolved = false;
+
+function waitForSharedWorkerReady(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!networkWorker) {
+      resolve();
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      if (!sharedWorkerReadyResolved) {
+        sharedWorkerReadyResolved = true;
+        log.warn('shared_worker_ready timeout — falling back to delayed connection', { timeoutMs: SHARED_WORKER_READY_TIMEOUT_MS });
+        finishSharedWorkerConnection();
+        resolve();
+      }
+    }, SHARED_WORKER_READY_TIMEOUT_MS);
+
+    networkWorker!.port.onmessage = (e: MessageEvent) => {
+      if (e.data?.type === 'shared_worker_ready' && !sharedWorkerReadyResolved) {
+        sharedWorkerReadyResolved = true;
+        clearTimeout(timeout);
+        log.info('shared worker ready signal received');
+        finishSharedWorkerConnection();
+        resolve();
+      }
+    };
+  });
+}
+
 function initMainSync(): void {
   if (!networkWorker || !sharedDoc) return;
 
@@ -298,9 +331,7 @@ async function init(): Promise<void> {
     log.info('persistence, checkpoints, and event log disabled');
   }
 
-  setTimeout(() => {
-    finishSharedWorkerConnection();   // transfer port + connect workers
-  }, 200);
+  await waitForSharedWorkerReady();  // explicit ready/ack replaces the old fixed-delay setTimeout
 }
 
 init().catch((err) => {
