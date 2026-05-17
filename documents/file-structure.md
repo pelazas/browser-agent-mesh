@@ -15,6 +15,7 @@ browser-agent-mesh/
 │   │   │   ├── root-doc.ts              # Y.Doc factory + getter functions
 │   │   │   ├── observer.ts              # Path-based Y.Doc mutation watcher
 │   │   │   ├── lock.ts                  # CRDT distributed lock (acquire/release/extend)
+│   │   │   ├── task-state.ts            # Read task state from blackboard CRDT
 │   │   │   └── worker-provider.ts       # Yjs sync over MessagePort + message types
 │   │   │
 │   │   ├── network/
@@ -48,13 +49,14 @@ browser-agent-mesh/
 │   ├── agents/
 │   │   ├── index.ts                     # Agent barrel export
 │   │   ├── base.ts                      # Abstract BaseAgent (doc, provider, run/stop)
+│   │   ├── keywords.ts                  # Keyword extraction + matching utilities
 │   │   ├── sentinel/
 │   │   │   ├── index.ts
 │   │   │   └── sentinel.ts              # Prompt → DAG decomposition, heuristic parser
 │   │   ├── worker/
 │   │   │   ├── index.ts
 │   │   │   ├── worker.ts                # Poll + claim + execute loop, CRDT lock integration
-│   │   │   ├── inference.ts             # WebLLM inference runner
+│   │   │   ├── inference.ts             # WebLLM inference runner (stub / migrated)
 │   │   │   ├── rag.ts                   # RAG pipeline (retrieve → evaluate → generate)
 │   │   │   ├── claimer.ts               # Task claiming helper (wraps lock.ts)
 │   │   │   └── pdf-summary.ts           # PDF/document cleanup, body detection, chunking
@@ -71,7 +73,7 @@ browser-agent-mesh/
 │   │       └── hitl.ts                  # Human-in-the-loop prompt with timeout
 │   │
 │   ├── workers/
-│   │   ├── network.shared.ts            # SharedWorker: root Y.Doc, y-webrtc, MCP, gossip
+│   │   ├── network.shared.ts            # SharedWorker: root Y.Doc, libp2p, MCP, gossip
 │   │   ├── sentinel.worker.ts           # Dedicated worker: Sentinel entry
 │   │   ├── node.worker.ts               # Dedicated worker: Node Worker entry + GPU profiling
 │   │   ├── bridge.worker.ts             # Dedicated worker: Bridge entry + tool registration
@@ -92,14 +94,19 @@ browser-agent-mesh/
 │   │   ├── context/
 │   │   │   └── BlackboardContext.ts      # React context providing Y.Doc to component tree
 │   │   ├── components/
-│   │   │   ├── MeshGraph.tsx             # Node topology visualization grid
-│   │   │   ├── PromptInput.tsx           # User prompt submission form
-│   │   │   ├── usePromptInput.ts         # Prompt input state + submit handlers
 │   │   │   ├── AgentCard.tsx             # Single agent status card (role, GPU, tasks)
+│   │   │   ├── BlackboardDebugger.tsx    # Live CRDT state JSON tree viewer
+│   │   │   ├── KeywordText.tsx           # Highlighted keyword display in prompts/responses
+│   │   │   ├── MarkdownRenderer.tsx      # Renders agent markdown output to DOM
+│   │   │   ├── MeshGraph.tsx             # Node topology visualization grid
+│   │   │   ├── PeerPopover.tsx           # Hover popover for peer info
+│   │   │   ├── RichPromptInput.tsx       # User prompt submission form (rich input)
 │   │   │   ├── TelemetryPanel.tsx        # Real-time metrics list
 │   │   │   ├── WorkflowView.tsx          # DAG progress bar + task counts
-│   │   │   ├── useWorkflowView.ts        # Workflow card derived state (progress, response)
-│   │   │   └── BlackboardDebugger.tsx    # Live CRDT state JSON tree viewer
+│   │   │   ├── useKeywordText.ts         # Keyword text highlight state + logic
+│   │   │   ├── usePeerPopover.ts         # Peer popover hover state + data fetch
+│   │   │   ├── useRichPromptInput.ts     # Prompt input state + submit handlers
+│   │   │   └── useWorkflowView.ts        # Workflow card derived state (progress, response)
 │   │   ├── hooks/
 │   │   │   ├── useBlackboard.ts          # Y.Doc → reactive React state (nodes, workflows, telemetry)
 │   │   │   ├── useAppView.ts             # App-level view models for workflows and prompt status
@@ -128,7 +135,22 @@ browser-agent-mesh/
 │   │   ├── id.test.ts                   # ID generation uniqueness
 │   │   ├── dag.test.ts                  # DAG construction, topology, readiness
 │   │   ├── validator.test.ts            # Conditional edge evaluation, field resolution
-│   │   └── pdf-summary.test.ts          # PDF/document preparation helper coverage
+│   │   ├── pdf-summary.test.ts          # PDF/document preparation helper coverage
+│   │   ├── task-state.test.ts           # CRDT task state reading
+│   │   ├── sentinel.test.ts             # Prompt decomposition into DAG
+│   │   ├── synthesizer.test.ts          # Completion detection + consolidation
+│   │   ├── node-worker.test.ts          # Worker poll/claim/execute lifecycle
+│   │   ├── bridge-agent.test.ts         # Bridge tool call execution
+│   │   ├── scraper.test.ts              # Web scraping logic
+│   │   ├── sync-pipe.test.ts            # Worker sync provider flow
+│   │   ├── peer-popover.test.ts         # Peer popover rendering data
+│   │   ├── rich-prompt-input.test.ts    # Rich prompt input state + validation
+│   │   ├── app-view.test.ts             # App-level view model tests
+│   │   ├── useAppView.test.ts           # useAppView hook tests
+│   │   ├── shared-worker-handshake.test.ts # SharedWorker ready/ack handshake
+│   │   └── core/
+│   │       └── persistence/
+│   │           └── database.test.ts     # SQLite WASM persistence wrapper
 │   └── e2e/
 │       └── app.spec.ts                  # Page load, prompt input, mesh graph smoke tests
 │
